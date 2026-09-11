@@ -70,6 +70,19 @@ jobs:
             echo "public_probe=$probe"
             if [ -f body.bin ]; then
               echo "public_body_sha256=$(sha256sum body.bin | awk '{print $1}')"
+              python3 - "$id" <<'PY'
+import html, re, sys
+from pathlib import Path
+raw = Path('body.bin').read_bytes()[:300000].decode('utf-8','ignore')
+mt = re.search(r'<title[^>]*>(.*?)</title>', raw, re.I|re.S)
+title = re.sub(r'\s+',' ', html.unescape(mt.group(1))).strip() if mt else ''
+clean = re.sub(r'<script\b[^>]*>.*?</script>', ' ', raw, flags=re.I|re.S)
+clean = re.sub(r'<style\b[^>]*>.*?</style>', ' ', clean, flags=re.I|re.S)
+clean = re.sub(r'<[^>]+>', ' ', clean)
+clean = re.sub(r'\s+',' ', html.unescape(clean)).strip()
+print('page_title=' + title[:160])
+print('page_snippet=' + clean[:220])
+PY
             fi
             echo
           done < oldest.tsv
