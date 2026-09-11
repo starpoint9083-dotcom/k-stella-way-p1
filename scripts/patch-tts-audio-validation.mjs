@@ -3,10 +3,13 @@ import fs from 'node:fs';
 const file='src/index.js';
 let source=fs.readFileSync(file,'utf8');
 
-const aiStart=source.indexOf('async function aiBinaryResult(result){');
-const narrationStart=source.indexOf('async function generateNarration(env,projectId,narration){');
+const aiMatch=/async\s+function\s+aiBinaryResult\s*\([^)]*\)\s*\{/.exec(source);
+const narrationMatch=/async\s+function\s+generateNarration\s*\([^)]*\)\s*\{/.exec(source);
+const aiStart=aiMatch?.index??-1,narrationStart=narrationMatch?.index??-1;
 if(aiStart<0||narrationStart<0||narrationStart<=aiStart){
-  console.error('TTS audio validation patch failed: aiBinaryResult/generateNarration anchors not found.');
+  const aiHint=source.match(/.{0,80}aiBinaryResult.{0,180}/s)?.[0]||'none';
+  const narrationHint=source.match(/.{0,80}generateNarration.{0,180}/s)?.[0]||'none';
+  console.error('TTS audio validation patch failed: function anchors not found/order invalid. aiHint='+aiHint+' narrationHint='+narrationHint);
   process.exit(1);
 }
 
@@ -68,7 +71,8 @@ async function aiBinaryResult(result){
 `;
 source=source.slice(0,aiStart)+audioHelpers+'\n'+source.slice(narrationStart);
 
-const genStart=source.indexOf('async function generateNarration(env,projectId,narration){');
+const genMatch=/async\s+function\s+generateNarration\s*\([^)]*\)\s*\{/.exec(source);
+const genStart=genMatch?.index??-1;
 const assertMarker="assertChars(narration,'narration',LIMITS.narration_max_chars);";
 const assertPos=source.indexOf(assertMarker,genStart);
 if(genStart<0||assertPos<0){
