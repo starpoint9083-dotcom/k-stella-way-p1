@@ -11,6 +11,7 @@ on:
       - 'scripts/patch-free-asset-reuse.mjs'
       - 'scripts/patch-production-queue-resume.mjs'
       - 'scripts/preflight.mjs'
+      - 'scripts/inspect-routes.mjs'
       - '.github/workflows/validate-p3-bridge.yml'
 
 permissions:
@@ -35,3 +36,5 @@ jobs:
         run: npm run preflight
       - name: Assert bridge auth is present
         run: node -e "const s=require('fs').readFileSync('src/index.js','utf8'); if(!s.includes('env.P3_BRIDGE_TOKEN&&token===env.P3_BRIDGE_TOKEN')) process.exit(1); console.log('P3 bridge auth validation PASS');"
+      - name: Diagnose render media path
+        run: node scripts/inspect-routes.mjs
