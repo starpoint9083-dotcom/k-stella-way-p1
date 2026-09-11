@@ -90,8 +90,10 @@ const P3_GITHUB_OIDC_AUDIENCE='k-stella-p1-p3-bridge';
 const P3_GITHUB_REPOSITORY='starpoint9083-dotcom/p3-automation-hub-';
 const P3_GITHUB_REPOSITORY_ID='1364648201';
 const P3_GITHUB_OWNER='starpoint9083-dotcom';
+const P3_GITHUB_OWNER_ID='307467963';
 const P3_GITHUB_REF='refs/heads/main';
 const P3_GITHUB_WORKFLOW_REF='starpoint9083-dotcom/p3-automation-hub-/.github/workflows/p1-browser-factory.yml@refs/heads/main';
+const P3_GITHUB_IMMUTABLE_SUB='repo:starpoint9083-dotcom@307467963/p3-automation-hub-@1364648201:ref:refs/heads/main';
 let p3GithubJwksCache=null,p3GithubJwksCacheAt=0;
 function p3Base64urlBytes(v){let s=String(v||'').replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const bin=atob(s),out=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return out;}
 function p3AudienceMatches(aud){return Array.isArray(aud)?aud.includes(P3_GITHUB_OIDC_AUDIENCE):String(aud||'')===P3_GITHUB_OIDC_AUDIENCE;}
@@ -112,11 +114,11 @@ async function verifyP3GithubOidc(value){
     const now=Math.floor(Date.now()/1000),exp=Number(payload?.exp||0),nbf=Number(payload?.nbf||0),iat=Number(payload?.iat||0);
     if(payload?.iss!==P3_GITHUB_OIDC_ISSUER||!p3AudienceMatches(payload?.aud))return false;
     if(payload?.repository!==P3_GITHUB_REPOSITORY||String(payload?.repository_id||'')!==P3_GITHUB_REPOSITORY_ID)return false;
-    if(payload?.repository_owner!==P3_GITHUB_OWNER||payload?.ref!==P3_GITHUB_REF)return false;
+    if(payload?.repository_owner!==P3_GITHUB_OWNER||String(payload?.repository_owner_id||'')!==P3_GITHUB_OWNER_ID||payload?.ref!==P3_GITHUB_REF)return false;
     if(payload?.workflow_ref!==P3_GITHUB_WORKFLOW_REF)return false;
     if(!['workflow_dispatch','schedule','push'].includes(String(payload?.event_name||'')))return false;
     if(payload?.runner_environment!=='github-hosted')return false;
-    if(payload?.sub!==('repo:'+P3_GITHUB_REPOSITORY+':ref:'+P3_GITHUB_REF))return false;
+    if(payload?.sub!==P3_GITHUB_IMMUTABLE_SUB)return false;
     if(!exp||exp<=now||exp>now+15*60)return false;
     if(nbf&&nbf>now+30)return false;
     if(!iat||iat>now+30||iat<now-15*60)return false;
@@ -165,6 +167,8 @@ for (const token of [
   'env.P3_BRIDGE_TOKEN&&token===env.P3_BRIDGE_TOKEN',
   'verifyP3GithubOidc(token)',
   "P3_GITHUB_OIDC_AUDIENCE='k-stella-p1-p3-bridge'",
+  "P3_GITHUB_OWNER_ID='307467963'",
+  "P3_GITHUB_IMMUTABLE_SUB='repo:starpoint9083-dotcom@307467963/p3-automation-hub-@1364648201:ref:refs/heads/main'",
   "P3_GITHUB_WORKFLOW_REF='starpoint9083-dotcom/p3-automation-hub-/.github/workflows/p1-browser-factory.yml@refs/heads/main'",
   "return verifySession(env,cookieValue(request,'kstella_session'))"
 ]) {
@@ -175,4 +179,4 @@ for (const token of [
 }
 
 fs.writeFileSync(file, source);
-console.log('ZERO-COST PATCH OK: KV adapter + isolated P3 token fallback + GitHub OIDC auth injected; one-time main push allowed for live P3 test; 12h session fallback preserved; render bitrate capped at 2.2 Mbps.');
+console.log('ZERO-COST PATCH OK: KV adapter + P3 GitHub immutable OIDC subject trust injected; one-time main push allowed for live test; 12h session fallback preserved; render bitrate capped at 2.2 Mbps.');
