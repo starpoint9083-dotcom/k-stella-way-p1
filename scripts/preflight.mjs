@@ -44,7 +44,8 @@ const requiredSource = [
   "recoverable_statuses:['cancelled','generating']",
   'async function rebuildMissingGenerationQueue',
   'LEFT JOIN generation_queue q ON q.scene_id=s.id',
-  's.selected_asset_id IS NULL AND q.id IS NULL',
+  's.missing=1 AND q.id IS NULL',
+  "NOT EXISTS (SELECT 1 FROM assets a WHERE a.id=s.selected_asset_id AND a.status='active')",
   "WHERE NOT EXISTS (SELECT 1 FROM generation_queue WHERE scene_id=?)",
   "INSERT INTO generation_queue(project_id,scene_id,scene_no,requirement_json,prompt,status) SELECT",
   "'queue_rebuilt'",
@@ -80,4 +81,4 @@ if (missing.length) {
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + zero-cost existing-asset fallback + stale queue recovery + missing unlinked queue rebuild + 12h session fallback verified.');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + zero-cost existing-asset fallback + stale queue recovery + robust missing-scene queue rebuild when no active asset exists + 12h session fallback verified.');
