@@ -1,0 +1,75 @@
+name: Audit Old Cloudflare Workers
+
+on:
+  push:
+    branches: [cloudflare-worker-audit]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WORKERS_SUBDOMAIN: starpoint9083.workers.dev
+    steps:
+      - name: Audit oldest Workers
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+          AUTH=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+
+          curl -fsS "${AUTH[@]}" "$API/workers/scripts" > scripts.json
+          if [ "$(jq -r '.success' scripts.json)" != "true" ]; then
+            echo "Cloudflare list workers API failed"
+            jq '.errors' scripts.json
+            exit 1
+          fi
+
+          echo "=== OLDEST 10 WORKERS BY MODIFIED/CREATED DATE ==="
+          jq -r '.result
+            | sort_by(.modified_on // .created_on // "9999")
+            | .[0:10][]
+            | [.id, (.created_on // ""), (.modified_on // ""), (.last_deployed_from // ""), ((.handlers // []) | join(","))]
+            | @tsv' scripts.json > oldest.tsv
+
+          n=0
+          while IFS=$'\t' read -r id created modified deployed_from handlers; do
+            n=$((n+1))
+            echo "--- #$n $id ---"
+            echo "created=$created"
+            echo "modified=$modified"
+            echo "last_deployed_from=$deployed_from"
+            echo "handlers=$handlers"
+
+            settings=$(curl -sS "${AUTH[@]}" "$API/workers/scripts/$id/settings" || true)
+            if [ -n "$settings" ] && [ "$(printf '%s' "$settings" | jq -r '.success // false' 2>/dev/null || echo false)" = "true" ]; then
+              compat=$(printf '%s' "$settings" | jq -r '.result.compatibility_date // ""')
+              bindings=$(printf '%s' "$settings" | jq -r '[.result.bindings[]? | ((.type // "") + ":" + (.name // ""))] | join(",")')
+              echo "compatibility_date=$compat"
+              echo "bindings=$bindings"
+            else
+              echo "settings=unavailable"
+            fi
+
+            deploy=$(curl -sS "${AUTH[@]}" "$API/workers/scripts/$id/deployments" || true)
+            if [ -n "$deploy" ] && printf '%s' "$deploy" | jq -e '.success == true' >/dev/null 2>&1; then
+              dcount=$(printf '%s' "$deploy" | jq -r 'if (.result|type)=="array" then (.result|length) elif (.result.deployments? != null) then (.result.deployments|length) else 0 end')
+              echo "deployment_count=$dcount"
+            else
+              echo "deployment_count=unknown"
+            fi
+
+            url="https://$id.$WORKERS_SUBDOMAIN/"
+            rm -f body.bin
+            probe=$(curl -L -sS --max-time 8 -o body.bin -w '%{http_code}\t%{size_download}\t%{content_type}' "$url" || true)
+            echo "public_probe=$probe"
+            if [ -f body.bin ]; then
+              echo "public_body_sha256=$(sha256sum body.bin | awk '{print $1}')"
+            fi
+            echo
+          done < oldest.tsv
