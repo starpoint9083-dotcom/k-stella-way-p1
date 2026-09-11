@@ -73,10 +73,12 @@ source=source.slice(0,aiStart)+audioHelpers+'\n'+source.slice(narrationStart);
 
 const genMatch=/async\s+function\s+generateNarration\s*\([^)]*\)\s*\{/.exec(source);
 const genStart=genMatch?.index??-1;
-const assertMarker="assertChars(narration,'narration',LIMITS.narration_max_chars);";
-const assertPos=source.indexOf(assertMarker,genStart);
+const genSlice=genStart>=0?source.slice(genStart):'';
+const assertMatch=/assertChars\([^;]{0,400}LIMITS\.narration_max_chars\);/.exec(genSlice);
+const assertPos=assertMatch?genStart+assertMatch.index:-1;
 if(genStart<0||assertPos<0){
-  console.error('TTS audio validation patch failed: generateNarration prefix/assert marker not found.');
+  const hint=genStart>=0?source.slice(genStart,Math.min(source.length,genStart+1600)):'generateNarration missing';
+  console.error('TTS audio validation patch failed: generateNarration assertion anchor not found. hint='+hint);
   process.exit(1);
 }
 const prefix=`async function generateNarration(env,projectId,narration){
