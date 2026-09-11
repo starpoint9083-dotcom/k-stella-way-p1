@@ -1,0 +1,54 @@
+name: Delete Approved Old Cloudflare Workers
+
+on:
+  push:
+    branches: [cloudflare-worker-audit]
+
+permissions:
+  contents: read
+
+jobs:
+  delete-approved:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Delete exactly five approved Workers
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+          AUTH=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          workers=(
+            blue-feather-964f
+            steep-waterfall-ce54
+            lucky-mountain-150d
+            spring-leaf-e085
+            summer-boat-510c
+          )
+
+          echo "Deleting exactly ${#workers[@]} user-approved Workers"
+          for id in "${workers[@]}"; do
+            echo "DELETE $id"
+            resp=$(curl -sS -X DELETE "${AUTH[@]}" "$API/workers/scripts/$id")
+            ok=$(printf '%s' "$resp" | jq -r '.success // false')
+            if [ "$ok" != "true" ]; then
+              echo "Delete failed for $id"
+              printf '%s' "$resp" | jq '.errors'
+              exit 1
+            fi
+          done
+
+          echo "Verifying removed names are absent"
+          curl -fsS "${AUTH[@]}" "$API/workers/scripts" > scripts-after.json
+          for id in "${workers[@]}"; do
+            if jq -e --arg id "$id" '.result[]? | select(.id == $id)' scripts-after.json >/dev/null; then
+              echo "Still present: $id"
+              exit 1
+            fi
+            echo "REMOVED $id"
+          done
+
+          echo "remaining_worker_count=$(jq '.result | length' scripts-after.json)"
