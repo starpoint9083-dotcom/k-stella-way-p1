@@ -19,7 +19,7 @@ const requiredSource = [
   "P3_GITHUB_REPOSITORY_ID='1364648201'",
   "P3_GITHUB_REF='refs/heads/main'",
   "P3_GITHUB_WORKFLOW_REF='starpoint9083-dotcom/p3-automation-hub-/.github/workflows/p1-browser-factory.yml@refs/heads/main'",
-  "['workflow_dispatch','schedule']",
+  "['workflow_dispatch','schedule','push']",
   "payload?.runner_environment!=='github-hosted'",
   "return verifySession(env,cookieValue(request,'kstella_session'))"
 ];
@@ -55,4 +55,4 @@ if (missing.length) {
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + P3 GitHub OIDC trust + 12h session fallback verified; no R2 billing dependency or embedded bridge secret.');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + P3 GitHub OIDC trust + one-time main-push live-test allowance + 12h session fallback verified; no R2 billing dependency or embedded bridge secret.');
