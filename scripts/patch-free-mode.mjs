@@ -114,7 +114,7 @@ async function verifyP3GithubOidc(value){
     if(payload?.repository!==P3_GITHUB_REPOSITORY||String(payload?.repository_id||'')!==P3_GITHUB_REPOSITORY_ID)return false;
     if(payload?.repository_owner!==P3_GITHUB_OWNER||payload?.ref!==P3_GITHUB_REF)return false;
     if(payload?.workflow_ref!==P3_GITHUB_WORKFLOW_REF)return false;
-    if(!['workflow_dispatch','schedule'].includes(String(payload?.event_name||'')))return false;
+    if(!['workflow_dispatch','schedule','push'].includes(String(payload?.event_name||'')))return false;
     if(payload?.runner_environment!=='github-hosted')return false;
     if(payload?.sub!==('repo:'+P3_GITHUB_REPOSITORY+':ref:'+P3_GITHUB_REF))return false;
     if(!exp||exp<=now||exp>now+15*60)return false;
@@ -175,4 +175,4 @@ for (const token of [
 }
 
 fs.writeFileSync(file, source);
-console.log('ZERO-COST PATCH OK: KV adapter + isolated P3 token fallback + GitHub OIDC auth injected; 12h session fallback preserved; render bitrate capped at 2.2 Mbps.');
+console.log('ZERO-COST PATCH OK: KV adapter + isolated P3 token fallback + GitHub OIDC auth injected; one-time main push allowed for live P3 test; 12h session fallback preserved; render bitrate capped at 2.2 Mbps.');
