@@ -27,7 +27,10 @@ const requiredSource = [
   "return verifySession(env,cookieValue(request,'kstella_session'))",
   "Promise.race([env.AI.run(model",
   "new Error('편성 AI 90초 제한 초과')",
-  '90000'
+  '90000',
+  'reuseExistingAssetAtFreeLimit',
+  'FREE_LIMIT_ASSET_REUSED',
+  'reused_due_to_free_limit:true'
 ];
 const requiredConfig = [
   'name = "k-stella-shorts-factory"',
@@ -62,4 +65,4 @@ if (missing.length) {
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + 90-second lineup AI fallback + 12h session fallback verified.');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + 90-second lineup fallback + zero-cost existing-asset fallback + 12h session fallback verified.');
