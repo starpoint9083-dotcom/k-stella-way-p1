@@ -75,9 +75,16 @@ if (!source.includes("header?.alg!=='RS256'")) missing.push('security: OIDC algo
 if (!source.includes("payload?.sub!==P3_GITHUB_IMMUTABLE_SUB")) missing.push('security: immutable OIDC subject pin');
 if (!source.includes("String(payload?.repository_owner_id||'')!==P3_GITHUB_OWNER_ID")) missing.push('security: owner id pin');
 if (!source.includes("crypto.subtle.verify({name:'RSASSA-PKCS1-v1_5'}")) missing.push('security: OIDC signature verification');
+
+for (const marker of ["path==='/api/queue'", "path==='/api/queue/generate'"]) {
+  const i = source.indexOf(marker);
+  console.log(`=== QUEUE API CONTRACT ${marker} idx=${i} ===`);
+  if (i >= 0) console.log(source.slice(Math.max(0, i - 900), Math.min(source.length, i + 2600)));
+}
+
 if (missing.length) {
   console.error('PREFLIGHT FAILED');
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + zero-cost existing-asset fallback + stale queue recovery + missing unlinked queue rebuild + 12h session fallback verified.');
+console.log('PREFLIGHT OK: diagnostic-only queue API contract inspection; production safety checks still pass.');
