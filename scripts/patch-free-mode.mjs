@@ -13,9 +13,13 @@ if (!source.includes('videoBitsPerSecond:3500000')) {
   process.exit(1);
 }
 
-const p3AuthMarker = "if(token){if(env.ADMIN_TOKEN&&token===env.ADMIN_TOKEN)return true;if(!env.DB)return false;";
-if (!source.includes(p3AuthMarker)) {
-  console.error('Free-mode patch failed: P1 auth marker not found.');
+const authFunctionMarker = `async function isAuthorized(request,env){
+  const token=extractToken(request);
+  if(token){if(env.ADMIN_TOKEN&&token===env.ADMIN_TOKEN)return true;if(!env.DB)return false;const salt=await getSetting(env,'admin_salt'),hash=await getSetting(env,'admin_hash');return !!hash&&(await hashPassword(token,salt))===hash;}
+  return verifySession(env,cookieValue(request,'kstella_session'));
+}`;
+if (!source.includes(authFunctionMarker)) {
+  console.error('Free-mode patch failed: exact P1 auth function marker not found.');
   process.exit(1);
 }
 
@@ -76,12 +80,67 @@ function kstellaAdaptFreeEnv(env) {
 }
 `;
 
+const p3OidcHelpers = `
+// P3 GITHUB ACTIONS OIDC TRUST BRIDGE
+// No shared password is required. Only the exact P3 production workflow on main
+// with the dedicated audience and a valid GitHub RS256 signature is accepted.
+const P3_GITHUB_OIDC_ISSUER='https://token.actions.githubusercontent.com';
+const P3_GITHUB_OIDC_JWKS='https://token.actions.githubusercontent.com/.well-known/jwks';
+const P3_GITHUB_OIDC_AUDIENCE='k-stella-p1-p3-bridge';
+const P3_GITHUB_REPOSITORY='starpoint9083-dotcom/p3-automation-hub-';
+const P3_GITHUB_REPOSITORY_ID='1364648201';
+const P3_GITHUB_OWNER='starpoint9083-dotcom';
+const P3_GITHUB_REF='refs/heads/main';
+const P3_GITHUB_WORKFLOW_REF='starpoint9083-dotcom/p3-automation-hub-/.github/workflows/p1-browser-factory.yml@refs/heads/main';
+let p3GithubJwksCache=null,p3GithubJwksCacheAt=0;
+function p3Base64urlBytes(v){let s=String(v||'').replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const bin=atob(s),out=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return out;}
+function p3AudienceMatches(aud){return Array.isArray(aud)?aud.includes(P3_GITHUB_OIDC_AUDIENCE):String(aud||'')===P3_GITHUB_OIDC_AUDIENCE;}
+async function p3GithubJwks(){
+  const now=Date.now();
+  if(p3GithubJwksCache&&now-p3GithubJwksCacheAt<60*60*1000)return p3GithubJwksCache;
+  const r=await fetch(P3_GITHUB_OIDC_JWKS,{headers:{accept:'application/json'}});
+  if(!r.ok)throw new Error('GitHub OIDC JWKS unavailable');
+  const d=await r.json();
+  if(!Array.isArray(d?.keys)||!d.keys.length)throw new Error('GitHub OIDC JWKS invalid');
+  p3GithubJwksCache=d.keys;p3GithubJwksCacheAt=now;return p3GithubJwksCache;
+}
+async function verifyP3GithubOidc(value){
+  try{
+    const parts=String(value||'').split('.');if(parts.length!==3)return false;
+    const header=JSON.parse(decodeB64urlText(parts[0])),payload=JSON.parse(decodeB64urlText(parts[1]));
+    if(header?.alg!=='RS256'||!header?.kid)return false;
+    const now=Math.floor(Date.now()/1000),exp=Number(payload?.exp||0),nbf=Number(payload?.nbf||0),iat=Number(payload?.iat||0);
+    if(payload?.iss!==P3_GITHUB_OIDC_ISSUER||!p3AudienceMatches(payload?.aud))return false;
+    if(payload?.repository!==P3_GITHUB_REPOSITORY||String(payload?.repository_id||'')!==P3_GITHUB_REPOSITORY_ID)return false;
+    if(payload?.repository_owner!==P3_GITHUB_OWNER||payload?.ref!==P3_GITHUB_REF)return false;
+    if(payload?.workflow_ref!==P3_GITHUB_WORKFLOW_REF)return false;
+    if(!['workflow_dispatch','schedule'].includes(String(payload?.event_name||'')))return false;
+    if(payload?.runner_environment!=='github-hosted')return false;
+    if(payload?.sub!==('repo:'+P3_GITHUB_REPOSITORY+':ref:'+P3_GITHUB_REF))return false;
+    if(!exp||exp<=now||exp>now+15*60)return false;
+    if(nbf&&nbf>now+30)return false;
+    if(!iat||iat>now+30||iat<now-15*60)return false;
+    const keys=await p3GithubJwks(),jwk=keys.find(k=>k?.kid===header.kid&&k?.kty==='RSA');if(!jwk)return false;
+    const key=await crypto.subtle.importKey('jwk',jwk,{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['verify']);
+    return await crypto.subtle.verify({name:'RSASSA-PKCS1-v1_5'},key,p3Base64urlBytes(parts[2]),new TextEncoder().encode(parts[0]+'.'+parts[1]));
+  }catch(_){return false;}
+}
+`;
+
+const authFunctionReplacement = `async function isAuthorized(request,env){
+  const token=extractToken(request);
+  if(token){
+    if(env.P3_BRIDGE_TOKEN&&token===env.P3_BRIDGE_TOKEN)return true;
+    if(await verifyP3GithubOidc(token))return true;
+    if(env.ADMIN_TOKEN&&token===env.ADMIN_TOKEN)return true;
+    if(env.DB){const salt=await getSetting(env,'admin_salt'),hash=await getSetting(env,'admin_hash');if(!!hash&&(await hashPassword(token,salt))===hash)return true;}
+  }
+  return verifySession(env,cookieValue(request,'kstella_session'));
+}`;
+
 source = adapter + '\n' + source;
 source = source.replace(marker, `${marker}\n    env = kstellaAdaptFreeEnv(env);`);
-source = source.replace(
-  p3AuthMarker,
-  "if(token){if(env.P3_BRIDGE_TOKEN&&token===env.P3_BRIDGE_TOKEN)return true;if(env.ADMIN_TOKEN&&token===env.ADMIN_TOKEN)return true;if(!env.DB)return false;"
-);
+source = source.replace(authFunctionMarker, p3OidcHelpers + '\n' + authFunctionReplacement);
 source = source.replace('videoBitsPerSecond:3500000', 'videoBitsPerSecond:2200000');
 
 const replacements = [
@@ -102,10 +161,18 @@ const replacements = [
 ];
 for (const [from, to] of replacements) source = source.split(from).join(to);
 
-if (!source.includes('env.P3_BRIDGE_TOKEN&&token===env.P3_BRIDGE_TOKEN')) {
-  console.error('Free-mode patch failed: P3 bridge auth was not injected.');
-  process.exit(1);
+for (const token of [
+  'env.P3_BRIDGE_TOKEN&&token===env.P3_BRIDGE_TOKEN',
+  'verifyP3GithubOidc(token)',
+  "P3_GITHUB_OIDC_AUDIENCE='k-stella-p1-p3-bridge'",
+  "P3_GITHUB_WORKFLOW_REF='starpoint9083-dotcom/p3-automation-hub-/.github/workflows/p1-browser-factory.yml@refs/heads/main'",
+  "return verifySession(env,cookieValue(request,'kstella_session'))"
+]) {
+  if (!source.includes(token)) {
+    console.error('Free-mode patch failed: required P3 OIDC marker missing: '+token);
+    process.exit(1);
+  }
 }
 
 fs.writeFileSync(file, source);
-console.log('ZERO-COST PATCH OK: KV adapter + P3 bridge auth injected, render bitrate capped at 2.2 Mbps, paid-use warnings replaced with free-limit stop behavior.');
+console.log('ZERO-COST PATCH OK: KV adapter + isolated P3 token fallback + GitHub OIDC auth injected; 12h session fallback preserved; render bitrate capped at 2.2 Mbps.');
