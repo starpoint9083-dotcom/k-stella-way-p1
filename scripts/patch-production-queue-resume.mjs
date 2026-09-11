@@ -23,14 +23,14 @@ if(ensureCount!==1){
 }
 
 const rebuildHelper=`async function rebuildMissingGenerationQueue(env,projectId){
-  const {results=[]}=await env.DB.prepare(\`SELECT s.id,s.scene_no,s.scene_text,s.requirement_json FROM scenes s LEFT JOIN generation_queue q ON q.scene_id=s.id WHERE s.project_id=? AND s.selected_asset_id IS NULL AND q.id IS NULL ORDER BY s.scene_no\`).bind(projectId).all();
+  const {results=[]}=await env.DB.prepare(\`SELECT s.id,s.scene_no,s.scene_text,s.requirement_json FROM scenes s LEFT JOIN generation_queue q ON q.scene_id=s.id WHERE s.project_id=? AND s.missing=1 AND q.id IS NULL AND NOT EXISTS (SELECT 1 FROM assets a WHERE a.id=s.selected_asset_id AND a.status='active') ORDER BY s.scene_no\`).bind(projectId).all();
   let rebuilt=0;
   for(const scene of results){
     let req={};try{req=JSON.parse(scene.requirement_json||'{}');}catch(_){req={};}
     const refs=await getReferenceAssets(env,req),prompt=buildPrompt(scene.scene_text,req,refs.length>0),requirementJson=String(scene.requirement_json||JSON.stringify(req));
     const inserted=await env.DB.prepare(\`INSERT INTO generation_queue(project_id,scene_id,scene_no,requirement_json,prompt,status) SELECT ?,?,?,?,?, 'waiting' WHERE NOT EXISTS (SELECT 1 FROM generation_queue WHERE scene_id=?)\`).bind(projectId,scene.id,scene.scene_no,requirementJson,prompt,scene.id).run();
     const changes=Number(inserted?.meta?.changes||0);
-    if(changes){await env.DB.prepare('UPDATE scenes SET missing=1 WHERE id=? AND selected_asset_id IS NULL').bind(scene.id).run();rebuilt+=changes;}
+    if(changes){await env.DB.prepare('UPDATE scenes SET missing=1 WHERE id=?').bind(scene.id).run();rebuilt+=changes;}
   }
   if(rebuilt)await logEvent(env,'warn','production','queue_rebuilt','누락된 부족 장면 큐 재생성',projectId,{rebuilt});
   return rebuilt;
@@ -57,7 +57,8 @@ for(const token of [
   "recoverable_statuses:['cancelled','generating']",
   'async function rebuildMissingGenerationQueue',
   'LEFT JOIN generation_queue q ON q.scene_id=s.id',
-  's.selected_asset_id IS NULL AND q.id IS NULL',
+  's.missing=1 AND q.id IS NULL',
+  "NOT EXISTS (SELECT 1 FROM assets a WHERE a.id=s.selected_asset_id AND a.status='active')",
   "WHERE NOT EXISTS (SELECT 1 FROM generation_queue WHERE scene_id=?)",
   "'queue_rebuilt'",
   '누락된 부족 장면 큐 재생성',
@@ -70,4 +71,4 @@ for(const token of [
 }
 
 fs.writeFileSync(file,source);
-console.log('PRODUCTION QUEUE RECOVERY PATCH OK: resumed projects recreate only missing unlinked scene queues, restore stale queues, and preserve zero-cost asset reuse before rendering.');
+console.log('PRODUCTION QUEUE RECOVERY PATCH OK: resumed missing scenes without a valid active asset recreate only absent queues, stale queues resume, and zero-cost asset reuse remains intact.');
