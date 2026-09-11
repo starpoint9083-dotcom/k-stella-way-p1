@@ -35,3 +35,4 @@ for (const [i, w] of windows.entries()) {
   console.log(`\n=== WINDOW ${i + 1} needle=${JSON.stringify(w.needle)} at=${w.at} ===`);
   console.log(src.slice(w.start, w.end));
 }
+console.log('QUEUE_IMAGE_DIAGNOSTIC=READY');
