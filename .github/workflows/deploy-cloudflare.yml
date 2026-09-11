@@ -76,8 +76,8 @@ jobs:
             echo "Dedicated D1 already exists."
           fi
 
-          r2_json=$(npx wrangler r2 bucket list --json)
-          if ! printf '%s' "$r2_json" | jq -e '.[]? | select(.name == "k-stella-shorts-assets")' >/dev/null; then
+          r2_text=$(npx wrangler r2 bucket list)
+          if ! printf '%s' "$r2_text" | grep -Fq 'k-stella-shorts-assets'; then
             echo "Creating dedicated R2 k-stella-shorts-assets"
             npx wrangler r2 bucket create k-stella-shorts-assets
           else
