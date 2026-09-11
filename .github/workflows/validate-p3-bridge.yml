@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/patch-free-mode.mjs'
       - 'scripts/preflight.mjs'
+      - 'scripts/inspect-lineup-generate.mjs'
       - '.github/workflows/validate-p3-bridge.yml'
 
 permissions:
@@ -26,6 +27,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Assemble, inject bridge auth, and syntax check
         run: npm run check
+      - name: Inspect lineup generation internals
+        run: node scripts/inspect-lineup-generate.mjs
       - name: P1 preflight
         run: npm run preflight
       - name: Assert bridge auth is present
