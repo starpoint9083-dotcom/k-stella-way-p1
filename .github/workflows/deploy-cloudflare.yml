@@ -1,0 +1,63 @@
+name: P1 Cloudflare Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: p1-k-stella-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate-deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Syntax check
+        run: npm run check
+
+      - name: P1 preflight
+        run: npm run preflight
+
+      - name: Resolve existing D1 binding
+        run: npm run generate:wrangler
+
+      - name: Wrangler dry-run
+        run: npx wrangler deploy --config wrangler.generated.toml --dry-run --outdir .wrangler-dry-run
+
+      - name: Deploy P1 Worker only
+        id: deploy
+        shell: bash
+        run: |
+          set -o pipefail
+          npx wrangler deploy --config wrangler.generated.toml 2>&1 | tee deploy.log
+          URL=$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' deploy.log | tail -1 || true)
+          if [ -z "$URL" ]; then
+            echo "Could not determine workers.dev URL from deploy output"
+            exit 1
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: End-to-end health verification
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: node scripts/verify-deploy.mjs
