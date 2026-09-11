@@ -53,7 +53,7 @@ for (const patch of patches) {
 source = helper + '\n' + source;
 
 for (const marker of [
-  "k-stellaAiDeadline(env.AI.run(model,{messages:",
+  "kstellaAiDeadline(env.AI.run(model,{messages:",
   "120000,'lineup Workers AI'",
   "180000,'image Workers AI'",
   "120000,'TTS Workers AI'"
