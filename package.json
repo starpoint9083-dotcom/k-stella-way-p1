@@ -8,7 +8,8 @@
     "patch:free": "node scripts/patch-free-mode.mjs",
     "patch:lineup-timeout": "node scripts/patch-lineup-timeout.mjs",
     "patch:media-timeouts": "node scripts/patch-media-timeouts.mjs",
-    "check": "npm run assemble && npm run patch:free && npm run patch:lineup-timeout && npm run patch:media-timeouts && node --check src/index.js",
+    "patch:asset-reuse": "node scripts/patch-free-asset-reuse.mjs",
+    "check": "npm run assemble && npm run patch:free && npm run patch:lineup-timeout && npm run patch:media-timeouts && npm run patch:asset-reuse && node --check src/index.js",
     "preflight": "node scripts/preflight.mjs",
     "generate:wrangler": "node scripts/generate-wrangler.mjs"
   },
