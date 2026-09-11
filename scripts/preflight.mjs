@@ -41,7 +41,15 @@ const requiredSource = [
   "status IN ('cancelled','generating')",
   "'queue_resume'",
   '중단된 부족 장면 큐 복구',
-  "recoverable_statuses:['cancelled','generating']"
+  "recoverable_statuses:['cancelled','generating']",
+  'async function rebuildMissingGenerationQueue',
+  'LEFT JOIN generation_queue q ON q.scene_id=s.id',
+  's.selected_asset_id IS NULL AND q.id IS NULL',
+  "WHERE NOT EXISTS (SELECT 1 FROM generation_queue WHERE scene_id=?)",
+  "INSERT INTO generation_queue(project_id,scene_id,scene_no,requirement_json,prompt,status) SELECT",
+  "'queue_rebuilt'",
+  '누락된 부족 장면 큐 재생성',
+  'queue_rebuilt:rebuilt'
 ];
 const requiredConfig = [
   'name = "k-stella-shorts-factory"',
@@ -61,12 +69,8 @@ const missing = [];
 for (const token of requiredSource) if (!source.includes(token)) missing.push(`source:${token}`);
 for (const token of requiredConfig) if (!tpl.includes(token)) missing.push(`config:${token}`);
 for (const token of forbiddenConfig) if (tpl.includes(token)) missing.push(`zero-cost violation:${token}`);
-if (/CLOUDFLARE_API_TOKEN\s*=|api[_-]?token\s*[:=]\s*["'][^"']+/i.test(source)) {
-  missing.push('security: possible hard-coded API token');
-}
-if (/P3_BRIDGE_TOKEN\s*=\s*["'][^"']+/i.test(source)) {
-  missing.push('security: hard-coded P3 bridge token');
-}
+if (/CLOUDFLARE_API_TOKEN\s*=|api[_-]?token\s*[:=]\s*["'][^"']+/i.test(source)) missing.push('security: possible hard-coded API token');
+if (/P3_BRIDGE_TOKEN\s*=\s*["'][^"']+/i.test(source)) missing.push('security: hard-coded P3 bridge token');
 if (!source.includes("header?.alg!=='RS256'")) missing.push('security: OIDC algorithm pin');
 if (!source.includes("payload?.sub!==P3_GITHUB_IMMUTABLE_SUB")) missing.push('security: immutable OIDC subject pin');
 if (!source.includes("String(payload?.repository_owner_id||'')!==P3_GITHUB_OWNER_ID")) missing.push('security: owner id pin');
@@ -76,4 +80,4 @@ if (missing.length) {
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + zero-cost existing-asset fallback + safe unlinked cancelled/stale-generating queue recovery + 12h session fallback verified.');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + zero-cost existing-asset fallback + stale queue recovery + missing unlinked queue rebuild + 12h session fallback verified.');
