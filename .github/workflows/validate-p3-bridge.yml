@@ -9,6 +9,7 @@ on:
       - 'scripts/patch-lineup-timeout.mjs'
       - 'scripts/patch-media-timeouts.mjs'
       - 'scripts/patch-free-asset-reuse.mjs'
+      - 'scripts/patch-production-queue-resume.mjs'
       - 'scripts/preflight.mjs'
       - '.github/workflows/validate-p3-bridge.yml'
 
