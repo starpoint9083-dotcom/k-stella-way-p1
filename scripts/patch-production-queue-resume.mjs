@@ -74,9 +74,9 @@ const recoveryRoute=`  if(path==='/api/maintenance/recover-lineup-queues'&&reque
         const recovery=await rebuildMissingGenerationQueue(env,projectId);
         const status=await updateProjectStatus(env,projectId);
         const sceneStat=await env.DB.prepare('SELECT COUNT(*) total,SUM(CASE WHEN selected_asset_id IS NULL OR missing=1 THEN 1 ELSE 0 END) missing FROM scenes WHERE project_id=?').bind(projectId).first();
-        const queueStat=await env.DB.prepare("SELECT SUM(CASE WHEN status='waiting' THEN 1 ELSE 0 END) waiting FROM generation_queue WHERE project_id=?").bind(projectId).first();
+        const {results:waitingRows=[]}=await env.DB.prepare("SELECT id,project_id,scene_id,scene_no,status FROM generation_queue WHERE project_id=? AND status='waiting' ORDER BY scene_no,id").bind(projectId).all();
         rebuilt+=Number(recovery.rebuilt||0);reconciled+=Number(recovery.reconciled||0);
-        projects.push({slot_no:Number(row.slot_no||0),project_id:projectId,rebuilt:Number(recovery.rebuilt||0),reconciled:Number(recovery.reconciled||0),missing:Number(sceneStat?.missing||0),waiting:Number(queueStat?.waiting||0),status});
+        projects.push({slot_no:Number(row.slot_no||0),project_id:projectId,rebuilt:Number(recovery.rebuilt||0),reconciled:Number(recovery.reconciled||0),missing:Number(sceneStat?.missing||0),waiting:waitingRows.length,waiting_queue:waitingRows.map(q=>({id:Number(q.id),project_id:String(q.project_id||projectId),scene_id:String(q.scene_id||''),scene_no:Number(q.scene_no||0),status:String(q.status||'waiting')})),status});
       }
       await logEvent(env,'warn','production','lineup_queue_recovery','편성표 부족 장면 큐 명시 복구','',{lineup_id:lineupId,project_count:projects.length,rebuilt,reconciled});
       return json({ok:true,lineup_id:lineupId,project_count:projects.length,rebuilt,reconciled,projects});
@@ -109,6 +109,8 @@ for(const token of [
   'queue_rebuilt:recovery.rebuilt',
   'scene_reconciled:recovery.reconciled',
   "/api/maintenance/recover-lineup-queues",
+  "SELECT id,project_id,scene_id,scene_no,status FROM generation_queue WHERE project_id=? AND status='waiting'",
+  'waiting_queue:waitingRows.map',
   "'lineup_queue_recovery'",
   '편성표 부족 장면 큐 명시 복구',
   'project_count:projects.length,rebuilt,reconciled,projects'
@@ -120,4 +122,4 @@ for(const token of [
 }
 
 fs.writeFileSync(file,source);
-console.log('PRODUCTION QUEUE RECOVERY PATCH OK: explicit authenticated lineup recovery API added; stale missing flags reconcile, truly asset-less scenes rebuild queues, stale queues resume, and zero-cost asset reuse remains intact.');
+console.log('PRODUCTION QUEUE RECOVERY PATCH OK: explicit authenticated lineup recovery API now returns concrete waiting queue ids; stale missing flags reconcile, truly asset-less scenes rebuild queues, stale queues resume, and zero-cost asset reuse remains intact.');
