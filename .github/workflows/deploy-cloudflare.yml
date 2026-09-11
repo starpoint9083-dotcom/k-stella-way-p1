@@ -27,24 +27,38 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
 
       - name: Install dependencies
         run: npm install
 
-      - name: Syntax check
+      - name: Assemble + syntax check
         run: npm run check
 
       - name: P1 preflight
         run: npm run preflight
 
+      - name: Check Cloudflare secrets
+        id: creds
+        shell: bash
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "Cloudflare credentials are configured."
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Cloudflare credentials are not configured yet; validation passed and deploy is safely skipped."
+          fi
+
       - name: Resolve existing D1 binding
+        if: steps.creds.outputs.ready == 'true'
         run: npm run generate:wrangler
 
       - name: Wrangler dry-run
+        if: steps.creds.outputs.ready == 'true'
         run: npx wrangler deploy --config wrangler.generated.toml --dry-run --outdir .wrangler-dry-run
 
       - name: Deploy P1 Worker only
+        if: steps.creds.outputs.ready == 'true'
         id: deploy
         shell: bash
         run: |
@@ -58,6 +72,7 @@ jobs:
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
       - name: End-to-end health verification
+        if: steps.creds.outputs.ready == 'true'
         env:
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
         run: node scripts/verify-deploy.mjs
