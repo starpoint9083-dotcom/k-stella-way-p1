@@ -90,3 +90,17 @@ if (missing.length) {
   process.exit(1);
 }
 console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + zero-cost existing-asset fallback + stale queue recovery + stale missing-scene reconciliation + true asset-less queue rebuild + explicit authenticated lineup recovery API + 12h session fallback verified.');
+
+console.log('=== MEDIA LOAD DIAGNOSTIC (READ ONLY) ===');
+for (const needle of ['미디어 파일을 불러오지 못했습니다','renderOnDevice','processProductionItem','new Image','new Audio','decodeAudioData','asset_object_key','/media/','/audio/']) {
+  let from = 0, shown = 0;
+  while (shown < 3) {
+    const idx = source.indexOf(needle, from);
+    if (idx < 0) break;
+    console.log(`--- ${needle} @ ${idx} ---`);
+    console.log(source.slice(Math.max(0, idx - 3000), Math.min(source.length, idx + needle.length + 5000)));
+    from = idx + needle.length;
+    shown++;
+  }
+  if (!shown) console.log(`--- ${needle} NOT FOUND ---`);
+}
