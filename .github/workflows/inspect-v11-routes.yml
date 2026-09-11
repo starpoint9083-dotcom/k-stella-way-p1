@@ -6,6 +6,11 @@ on:
     paths:
       - 'scripts/inspect-routes.mjs'
       - '.github/workflows/inspect-v11-routes.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/inspect-routes.mjs'
+      - '.github/workflows/inspect-v11-routes.yml'
   workflow_dispatch:
 
 permissions:
@@ -23,5 +28,5 @@ jobs:
       - run: npm install
       - name: Assemble and patch V11
         run: npm run check
-      - name: Inspect routes and production keywords
+      - name: Inspect session/auth route insertion points
         run: node scripts/inspect-routes.mjs
