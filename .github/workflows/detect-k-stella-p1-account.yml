@@ -1,0 +1,32 @@
+name: Detect K-STELLA-P1 Cloudflare Account
+
+on:
+  push:
+    branches: [cloudflare-worker-audit]
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Detect accessible Cloudflare account
+        shell: bash
+        run: |
+          set -euo pipefail
+          resp=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts?per_page=100")
+          ok=$(printf '%s' "$resp" | jq -r '.success // false')
+          [ "$ok" = "true" ] || { echo "Cloudflare accounts API failed"; exit 1; }
+          echo "Accessible accounts:"
+          printf '%s' "$resp" | jq -r '.result[]?.name'
+          count=$(printf '%s' "$resp" | jq '[.result[]? | select(.name == "K-STELLA-P1")] | length')
+          if [ "$count" -eq 1 ]; then
+            echo "FOUND_K_STELLA_P1=true"
+          else
+            echo "FOUND_K_STELLA_P1=false count=$count"
+            exit 2
+          fi
