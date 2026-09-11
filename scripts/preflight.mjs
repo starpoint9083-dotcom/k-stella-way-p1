@@ -45,12 +45,16 @@ const requiredSource = [
   'async function rebuildMissingGenerationQueue',
   'LEFT JOIN generation_queue q ON q.scene_id=s.id',
   's.missing=1 AND q.id IS NULL',
-  "NOT EXISTS (SELECT 1 FROM assets a WHERE a.id=s.selected_asset_id AND a.status='active')",
+  "SELECT id FROM assets WHERE id=? AND status='active'",
+  "UPDATE scenes SET missing=0 WHERE id=?",
+  "'scene_state_reconciled'",
+  '기존 active 자산 장면 상태 복구',
   "WHERE NOT EXISTS (SELECT 1 FROM generation_queue WHERE scene_id=?)",
   "INSERT INTO generation_queue(project_id,scene_id,scene_no,requirement_json,prompt,status) SELECT",
   "'queue_rebuilt'",
   '누락된 부족 장면 큐 재생성',
-  'queue_rebuilt:rebuilt'
+  'queue_rebuilt:recovery.rebuilt',
+  'scene_reconciled:recovery.reconciled'
 ];
 const requiredConfig = [
   'name = "k-stella-shorts-factory"',
@@ -81,4 +85,4 @@ if (missing.length) {
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + zero-cost existing-asset fallback + stale queue recovery + robust missing-scene queue rebuild when no active asset exists + 12h session fallback verified.');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + zero-cost existing-asset fallback + stale queue recovery + stale missing-scene reconciliation + true asset-less queue rebuild + 12h session fallback verified.');

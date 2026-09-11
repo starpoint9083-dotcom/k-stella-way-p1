@@ -23,24 +23,31 @@ if(ensureCount!==1){
 }
 
 const rebuildHelper=`async function rebuildMissingGenerationQueue(env,projectId){
-  const {results=[]}=await env.DB.prepare(\`SELECT s.id,s.scene_no,s.scene_text,s.requirement_json FROM scenes s LEFT JOIN generation_queue q ON q.scene_id=s.id WHERE s.project_id=? AND s.missing=1 AND q.id IS NULL AND NOT EXISTS (SELECT 1 FROM assets a WHERE a.id=s.selected_asset_id AND a.status='active') ORDER BY s.scene_no\`).bind(projectId).all();
-  let rebuilt=0;
+  const {results=[]}=await env.DB.prepare(\`SELECT s.id,s.scene_no,s.scene_text,s.requirement_json,s.selected_asset_id FROM scenes s LEFT JOIN generation_queue q ON q.scene_id=s.id WHERE s.project_id=? AND s.missing=1 AND q.id IS NULL ORDER BY s.scene_no\`).bind(projectId).all();
+  let rebuilt=0,reconciled=0;
   for(const scene of results){
+    const activeAsset=scene.selected_asset_id?await env.DB.prepare("SELECT id FROM assets WHERE id=? AND status='active'").bind(scene.selected_asset_id).first():null;
+    if(activeAsset){
+      await env.DB.prepare('UPDATE scenes SET missing=0 WHERE id=?').bind(scene.id).run();
+      reconciled++;
+      continue;
+    }
     let req={};try{req=JSON.parse(scene.requirement_json||'{}');}catch(_){req={};}
     const refs=await getReferenceAssets(env,req),prompt=buildPrompt(scene.scene_text,req,refs.length>0),requirementJson=String(scene.requirement_json||JSON.stringify(req));
     const inserted=await env.DB.prepare(\`INSERT INTO generation_queue(project_id,scene_id,scene_no,requirement_json,prompt,status) SELECT ?,?,?,?,?, 'waiting' WHERE NOT EXISTS (SELECT 1 FROM generation_queue WHERE scene_id=?)\`).bind(projectId,scene.id,scene.scene_no,requirementJson,prompt,scene.id).run();
     const changes=Number(inserted?.meta?.changes||0);
     if(changes){await env.DB.prepare('UPDATE scenes SET missing=1 WHERE id=?').bind(scene.id).run();rebuilt+=changes;}
   }
+  if(reconciled)await logEvent(env,'info','production','scene_state_reconciled','기존 active 자산 장면 상태 복구',projectId,{reconciled});
   if(rebuilt)await logEvent(env,'warn','production','queue_rebuilt','누락된 부족 장면 큐 재생성',projectId,{rebuilt});
-  return rebuilt;
+  return {rebuilt,reconciled};
 }
 
 `;
 source=source.replace(ensureAnchor,rebuildHelper+ensureAnchor);
 
 const reusedExact=`    if(item.project_id){planned.push({slot_no:item.slot_no,project_id:item.project_id,reused:true});continue;}`;
-const reusedReplacement=`    if(item.project_id){const rebuilt=await rebuildMissingGenerationQueue(env,item.project_id),status=await updateProjectStatus(env,item.project_id);planned.push({slot_no:item.slot_no,project_id:item.project_id,reused:true,status,queue_rebuilt:rebuilt});continue;}`;
+const reusedReplacement=`    if(item.project_id){const recovery=await rebuildMissingGenerationQueue(env,item.project_id),status=await updateProjectStatus(env,item.project_id);planned.push({slot_no:item.slot_no,project_id:item.project_id,reused:true,status,queue_rebuilt:recovery.rebuilt,scene_reconciled:recovery.reconciled});continue;}`;
 const reusedCount=source.split(reusedExact).length-1;
 if(reusedCount!==1){
   console.error(`Missing queue rebuild patch failed: expected reused-project branch once, found ${reusedCount}.`);
@@ -58,11 +65,15 @@ for(const token of [
   'async function rebuildMissingGenerationQueue',
   'LEFT JOIN generation_queue q ON q.scene_id=s.id',
   's.missing=1 AND q.id IS NULL',
-  "NOT EXISTS (SELECT 1 FROM assets a WHERE a.id=s.selected_asset_id AND a.status='active')",
+  "SELECT id FROM assets WHERE id=? AND status='active'",
+  "UPDATE scenes SET missing=0 WHERE id=?",
+  "'scene_state_reconciled'",
+  '기존 active 자산 장면 상태 복구',
   "WHERE NOT EXISTS (SELECT 1 FROM generation_queue WHERE scene_id=?)",
   "'queue_rebuilt'",
   '누락된 부족 장면 큐 재생성',
-  'queue_rebuilt:rebuilt'
+  'queue_rebuilt:recovery.rebuilt',
+  'scene_reconciled:recovery.reconciled'
 ]){
   if(!source.includes(token)){
     console.error('Production queue recovery patch failed: required marker missing: '+token);
@@ -71,4 +82,4 @@ for(const token of [
 }
 
 fs.writeFileSync(file,source);
-console.log('PRODUCTION QUEUE RECOVERY PATCH OK: resumed missing scenes without a valid active asset recreate only absent queues, stale queues resume, and zero-cost asset reuse remains intact.');
+console.log('PRODUCTION QUEUE RECOVERY PATCH OK: stale missing flags with valid active assets are reconciled; only truly asset-less missing scenes rebuild absent queues; stale queue recovery and zero-cost asset reuse remain intact.');
