@@ -30,7 +30,12 @@ const requiredSource = [
   "new Error('이미지 AI 180초 제한 초과')",
   '180000',
   "new Error('TTS AI 120초 제한 초과')",
-  '120000'
+  '120000',
+  'reuseExistingAssetAtFreeLimit',
+  'FREE_LIMIT_ASSET_REUSED',
+  "logEvent(env,'warn','ai','FREE_LIMIT_ASSET_REUSED'",
+  'reused_due_to_free_limit:true',
+  "assertUsageWithinLimit(env,'image_generations','daily_image_limit',60)"
 ];
 const requiredConfig = [
   'name = "k-stella-shorts-factory"',
@@ -65,4 +70,4 @@ if (missing.length) {
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + 12h session fallback verified.');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + zero-cost existing-asset fallback + 12h session fallback verified.');
