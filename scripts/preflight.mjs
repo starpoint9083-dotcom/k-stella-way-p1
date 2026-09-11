@@ -74,4 +74,21 @@ if (missing.length) {
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
+
+const lines = source.split(/\r?\n/);
+function printContext(label, needle, before = 8, after = 28) {
+  const index = lines.findIndex((line) => line.includes(needle));
+  console.log(`=== DIAG ${label} index=${index + 1} ===`);
+  if (index < 0) return;
+  const start = Math.max(0, index - before);
+  const end = Math.min(lines.length, index + after);
+  for (let i = start; i < end; i++) console.log(`${i + 1}: ${lines[i].slice(0, 2400)}`);
+}
+printContext('ensureProjectImages', 'ensureProjectImages');
+printContext('processProductionItem', 'processProductionItem');
+printContext('missing-assets-error', '부족 장면 이미지를 먼저 생성하세요');
+printContext('queue-generate-route', '/api/queue/generate');
+printContext('queue-list-route', '/api/queue?');
+printContext('generateQueueImage', 'generateQueueImage');
+
 console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + zero-cost existing-asset fallback + cancelled queue recovery + 12h session fallback verified.');
