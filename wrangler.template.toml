@@ -8,15 +8,16 @@ IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b"
 TEXT_MODEL = "@cf/zai-org/glm-4.7-flash"
 TTS_MODEL = "@cf/myshell-ai/melotts"
 TTS_LANG = "KR"
+STORAGE_MODE = "kv-free"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "k-stella-shorts-factory"
 database_id = "__D1_DATABASE_ID__"
 
-[[r2_buckets]]
+[[kv_namespaces]]
 binding = "ASSETS_BUCKET"
-bucket_name = "k-stella-shorts-assets"
+id = "__KV_NAMESPACE_ID__"
 
 [ai]
 binding = "AI"
