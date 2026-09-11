@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "assemble": "node scripts/assemble-source.mjs",
-    "check": "npm run assemble && node --check src/index.js",
+    "patch:free": "node scripts/patch-free-mode.mjs",
+    "check": "npm run assemble && npm run patch:free && node --check src/index.js",
     "preflight": "node scripts/preflight.mjs",
     "generate:wrangler": "node scripts/generate-wrangler.mjs"
   },
