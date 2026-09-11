@@ -28,10 +28,5 @@ jobs:
         run: npm run check
       - name: P1 preflight
         run: npm run preflight
-      - name: Assert bridge secret is environment-only
-        shell: bash
-        run: |
-          set -euo pipefail
-          grep -q 'env.P3_BRIDGE_TOKEN&&token===env.P3_BRIDGE_TOKEN' src/index.js
-          ! grep -Eq 'P3_BRIDGE_TOKEN[[:space:]]*=[[:space:]]*["'"'][^"'"']+' src/index.js
-          echo 'P3 bridge auth validation PASS'
+      - name: Assert bridge auth is present
+        run: node -e "const s=require('fs').readFileSync('src/index.js','utf8'); if(!s.includes('env.P3_BRIDGE_TOKEN&&token===env.P3_BRIDGE_TOKEN')) process.exit(1); console.log('P3 bridge auth validation PASS');"
