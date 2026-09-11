@@ -33,6 +33,21 @@ jobs:
       - name: Assemble + syntax check
         run: npm run check
 
+      - name: Inspect asset API usage
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const lines = fs.readFileSync('src/index.js','utf8').split(/\r?\n/);
+          for (let i=0;i<lines.length;i++) {
+            if (lines[i].includes('ASSETS_BUCKET')) {
+              const a=Math.max(0,i-2), b=Math.min(lines.length,i+3);
+              console.log(`--- ASSETS_BUCKET around line ${i+1} ---`);
+              console.log(lines.slice(a,b).map((x,j)=>`${a+j+1}: ${x}`).join('\n'));
+            }
+          }
+          NODE
+
       - name: P1 preflight
         run: npm run preflight
 
