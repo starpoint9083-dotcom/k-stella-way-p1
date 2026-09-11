@@ -1,0 +1,7 @@
+node_modules/
+.wrangler/
+.wrangler-dry-run/
+wrangler.generated.toml
+deploy.log
+.env
+.dev.vars
