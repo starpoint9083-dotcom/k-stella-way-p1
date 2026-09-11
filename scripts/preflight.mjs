@@ -30,7 +30,9 @@ const requiredSource = [
   '90000',
   'reuseExistingAssetAtFreeLimit',
   'FREE_LIMIT_ASSET_REUSED',
-  'reused_due_to_free_limit:true'
+  "logEvent(env,'warn','ai','FREE_LIMIT_ASSET_REUSED'",
+  'reused_due_to_free_limit:true',
+  "assertUsageWithinLimit(env,'image_generations','daily_image_limit',60)"
 ];
 const requiredConfig = [
   'name = "k-stella-shorts-factory"',
