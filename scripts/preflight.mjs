@@ -10,7 +10,8 @@ const requiredSource = [
   'env.DB',
   'env.AI',
   'KSTELLA_KV_MAX_VALUE',
-  'kstellaAdaptFreeEnv'
+  'kstellaAdaptFreeEnv',
+  'env.P3_BRIDGE_TOKEN&&token===env.P3_BRIDGE_TOKEN'
 ];
 const requiredConfig = [
   'name = "k-stella-shorts-factory"',
@@ -33,9 +34,12 @@ for (const token of forbiddenConfig) if (tpl.includes(token)) missing.push(`zero
 if (/CLOUDFLARE_API_TOKEN\s*=|api[_-]?token\s*[:=]\s*["'][^"']+/i.test(source)) {
   missing.push('security: possible hard-coded API token');
 }
+if (/P3_BRIDGE_TOKEN\s*=\s*["'][^"']+/i.test(source)) {
+  missing.push('security: hard-coded P3 bridge token');
+}
 if (missing.length) {
   console.error('PREFLIGHT FAILED');
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI contract verified; no R2 billing dependency.');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + isolated P3 bridge auth verified; no R2 billing dependency or embedded bridge secret.');
