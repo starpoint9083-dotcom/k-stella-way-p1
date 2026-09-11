@@ -8,18 +8,21 @@ const needles = [
   'lineup_date',
   'env.AI.run',
   '@cf/',
-  'Workers AI'
+  'Workers AI',
+  'generateQueueImage',
+  "assertUsageWithinLimit(env,'image_generations'",
+  'generation_queue q JOIN projects'
 ];
 
 const windows = [];
 for (const needle of needles) {
   let from = 0;
   let count = 0;
-  while (count < 8) {
+  while (count < 10) {
     const at = src.indexOf(needle, from);
     if (at < 0) break;
-    const start = Math.max(0, at - 3500);
-    const end = Math.min(src.length, at + 7000);
+    const start = Math.max(0, at - 4000);
+    const end = Math.min(src.length, at + 9000);
     if (!windows.some((w) => Math.abs(w.at - at) < 2500)) windows.push({ needle, at, start, end });
     from = at + needle.length;
     count += 1;
