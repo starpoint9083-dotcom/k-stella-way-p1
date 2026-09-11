@@ -24,7 +24,10 @@ const requiredSource = [
   "['workflow_dispatch','schedule','push']",
   "payload?.runner_environment!=='github-hosted'",
   "payload?.sub!==P3_GITHUB_IMMUTABLE_SUB",
-  "return verifySession(env,cookieValue(request,'kstella_session'))"
+  "return verifySession(env,cookieValue(request,'kstella_session'))",
+  "Promise.race([env.AI.run(model",
+  "new Error('편성 AI 90초 제한 초과')",
+  '90000'
 ];
 const requiredConfig = [
   'name = "k-stella-shorts-factory"',
@@ -59,4 +62,4 @@ if (missing.length) {
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC subject/owner/repo identity + one-time push test allowance + 12h session fallback verified.');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + 90-second lineup AI fallback + 12h session fallback verified.');
