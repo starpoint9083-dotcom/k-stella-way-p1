@@ -6,6 +6,11 @@ on:
     paths:
       - 'scripts/inspect-routes.mjs'
       - '.github/workflows/inspect-v11-routes.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/inspect-routes.mjs'
+      - '.github/workflows/inspect-v11-routes.yml'
   workflow_dispatch:
 
 permissions:
