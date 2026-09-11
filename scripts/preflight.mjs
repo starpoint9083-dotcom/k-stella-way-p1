@@ -24,7 +24,11 @@ const requiredSource = [
   "['workflow_dispatch','schedule','push']",
   "payload?.runner_environment!=='github-hosted'",
   "payload?.sub!==P3_GITHUB_IMMUTABLE_SUB",
-  "return verifySession(env,cookieValue(request,'kstella_session'))"
+  "return verifySession(env,cookieValue(request,'kstella_session'))",
+  'async function kstellaAiDeadline(promise,timeoutMs,label){',
+  "120000,'lineup Workers AI'",
+  "180000,'image Workers AI'",
+  "120000,'TTS Workers AI'"
 ];
 const requiredConfig = [
   'name = "k-stella-shorts-factory"',
@@ -54,9 +58,12 @@ if (!source.includes("header?.alg!=='RS256'")) missing.push('security: OIDC algo
 if (!source.includes("payload?.sub!==P3_GITHUB_IMMUTABLE_SUB")) missing.push('security: immutable OIDC subject pin');
 if (!source.includes("String(payload?.repository_owner_id||'')!==P3_GITHUB_OWNER_ID")) missing.push('security: owner id pin');
 if (!source.includes("crypto.subtle.verify({name:'RSASSA-PKCS1-v1_5'}")) missing.push('security: OIDC signature verification');
+if (!source.includes("k-stellaAiDeadline(env.AI.run(model,{messages:")) missing.push('resilience: lineup AI deadline wrapper');
+if (!source.includes("180000,'image Workers AI'")) missing.push('resilience: image AI deadline wrapper');
+if (!source.includes("120000,'TTS Workers AI'")) missing.push('resilience: TTS AI deadline wrapper');
 if (missing.length) {
   console.error('PREFLIGHT FAILED');
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC subject/owner/repo identity + one-time push test allowance + 12h session fallback verified.');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + bounded Workers AI calls + immutable P3 GitHub OIDC identity + one-time push test allowance + 12h session fallback verified.');
