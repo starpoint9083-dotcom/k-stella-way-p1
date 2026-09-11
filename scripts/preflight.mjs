@@ -54,7 +54,11 @@ const requiredSource = [
   "'queue_rebuilt'",
   '누락된 부족 장면 큐 재생성',
   'queue_rebuilt:recovery.rebuilt',
-  'scene_reconciled:recovery.reconciled'
+  'scene_reconciled:recovery.reconciled',
+  "/api/maintenance/recover-lineup-queues",
+  "'lineup_queue_recovery'",
+  '편성표 부족 장면 큐 명시 복구',
+  'project_count:projects.length,rebuilt,reconciled,projects'
 ];
 const requiredConfig = [
   'name = "k-stella-shorts-factory"',
@@ -85,4 +89,4 @@ if (missing.length) {
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + zero-cost existing-asset fallback + stale queue recovery + stale missing-scene reconciliation + true asset-less queue rebuild + 12h session fallback verified.');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + zero-cost existing-asset fallback + stale queue recovery + stale missing-scene reconciliation + true asset-less queue rebuild + explicit authenticated lineup recovery API + 12h session fallback verified.');
