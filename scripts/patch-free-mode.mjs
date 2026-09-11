@@ -13,6 +13,12 @@ if (!source.includes('videoBitsPerSecond:3500000')) {
   process.exit(1);
 }
 
+const p3AuthMarker = "if(token){if(env.ADMIN_TOKEN&&token===env.ADMIN_TOKEN)return true;if(!env.DB)return false;";
+if (!source.includes(p3AuthMarker)) {
+  console.error('Free-mode patch failed: P1 auth marker not found.');
+  process.exit(1);
+}
+
 const adapter = `
 // K-STELLA P1 ZERO-COST STORAGE ADAPTER
 // Workers KV is used behind the existing ASSETS_BUCKET contract so the V11
@@ -72,6 +78,10 @@ function kstellaAdaptFreeEnv(env) {
 
 source = adapter + '\n' + source;
 source = source.replace(marker, `${marker}\n    env = kstellaAdaptFreeEnv(env);`);
+source = source.replace(
+  p3AuthMarker,
+  "if(token){if(env.P3_BRIDGE_TOKEN&&token===env.P3_BRIDGE_TOKEN)return true;if(env.ADMIN_TOKEN&&token===env.ADMIN_TOKEN)return true;if(!env.DB)return false;"
+);
 source = source.replace('videoBitsPerSecond:3500000', 'videoBitsPerSecond:2200000');
 
 const replacements = [
@@ -92,5 +102,10 @@ const replacements = [
 ];
 for (const [from, to] of replacements) source = source.split(from).join(to);
 
+if (!source.includes('env.P3_BRIDGE_TOKEN&&token===env.P3_BRIDGE_TOKEN')) {
+  console.error('Free-mode patch failed: P3 bridge auth was not injected.');
+  process.exit(1);
+}
+
 fs.writeFileSync(file, source);
-console.log('ZERO-COST PATCH OK: KV adapter injected, render bitrate capped at 2.2 Mbps, paid-use warnings replaced with free-limit stop behavior.');
+console.log('ZERO-COST PATCH OK: KV adapter + P3 bridge auth injected, render bitrate capped at 2.2 Mbps, paid-use warnings replaced with free-limit stop behavior.');
