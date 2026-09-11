@@ -11,7 +11,17 @@ const requiredSource = [
   'env.AI',
   'KSTELLA_KV_MAX_VALUE',
   'kstellaAdaptFreeEnv',
-  'env.P3_BRIDGE_TOKEN&&token===env.P3_BRIDGE_TOKEN'
+  'env.P3_BRIDGE_TOKEN&&token===env.P3_BRIDGE_TOKEN',
+  'verifyP3GithubOidc(token)',
+  "P3_GITHUB_OIDC_ISSUER='https://token.actions.githubusercontent.com'",
+  "P3_GITHUB_OIDC_AUDIENCE='k-stella-p1-p3-bridge'",
+  "P3_GITHUB_REPOSITORY='starpoint9083-dotcom/p3-automation-hub-'",
+  "P3_GITHUB_REPOSITORY_ID='1364648201'",
+  "P3_GITHUB_REF='refs/heads/main'",
+  "P3_GITHUB_WORKFLOW_REF='starpoint9083-dotcom/p3-automation-hub-/.github/workflows/p1-browser-factory.yml@refs/heads/main'",
+  "['workflow_dispatch','schedule']",
+  "payload?.runner_environment!=='github-hosted'",
+  "return verifySession(env,cookieValue(request,'kstella_session'))"
 ];
 const requiredConfig = [
   'name = "k-stella-shorts-factory"',
@@ -37,9 +47,12 @@ if (/CLOUDFLARE_API_TOKEN\s*=|api[_-]?token\s*[:=]\s*["'][^"']+/i.test(source)) 
 if (/P3_BRIDGE_TOKEN\s*=\s*["'][^"']+/i.test(source)) {
   missing.push('security: hard-coded P3 bridge token');
 }
+if (!source.includes("header?.alg!=='RS256'")) missing.push('security: OIDC algorithm pin');
+if (!source.includes("payload?.sub!==('repo:'+P3_GITHUB_REPOSITORY+':ref:'+P3_GITHUB_REF)")) missing.push('security: OIDC subject pin');
+if (!source.includes("crypto.subtle.verify({name:'RSASSA-PKCS1-v1_5'}")) missing.push('security: OIDC signature verification');
 if (missing.length) {
   console.error('PREFLIGHT FAILED');
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + isolated P3 bridge auth verified; no R2 billing dependency or embedded bridge secret.');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + P3 GitHub OIDC trust + 12h session fallback verified; no R2 billing dependency or embedded bridge secret.');
