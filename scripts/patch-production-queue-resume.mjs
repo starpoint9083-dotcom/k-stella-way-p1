@@ -55,6 +55,40 @@ if(reusedCount!==1){
 }
 source=source.replace(reusedExact,reusedReplacement);
 
+const apiAnchor=`  if(path==='/api/health'&&request.method==='GET')`;
+const apiAnchorCount=source.split(apiAnchor).length-1;
+if(apiAnchorCount!==1){
+  console.error(`Explicit lineup recovery API patch failed: expected health API anchor once, found ${apiAnchorCount}.`);
+  process.exit(1);
+}
+const recoveryRoute=`  if(path==='/api/maintenance/recover-lineup-queues'&&request.method==='POST'){
+    const d=await readJson(request),lineupId=String(d.lineup_id||'');
+    if(!lineupId)return json({ok:false,error:'편성표 ID가 필요합니다.'},400);
+    try{
+      const lineup=await env.DB.prepare('SELECT id FROM daily_lineups WHERE id=?').bind(lineupId).first();
+      if(!lineup)return json({ok:false,error:'편성표를 찾을 수 없습니다.'},404);
+      const {results=[]}=await env.DB.prepare('SELECT slot_no,project_id FROM lineup_items WHERE lineup_id=? AND project_id IS NOT NULL ORDER BY slot_no').bind(lineupId).all();
+      let rebuilt=0,reconciled=0;const projects=[];
+      for(const row of results){
+        const projectId=String(row.project_id||'');if(!projectId)continue;
+        const recovery=await rebuildMissingGenerationQueue(env,projectId);
+        const status=await updateProjectStatus(env,projectId);
+        const sceneStat=await env.DB.prepare('SELECT COUNT(*) total,SUM(CASE WHEN selected_asset_id IS NULL OR missing=1 THEN 1 ELSE 0 END) missing FROM scenes WHERE project_id=?').bind(projectId).first();
+        const queueStat=await env.DB.prepare("SELECT SUM(CASE WHEN status='waiting' THEN 1 ELSE 0 END) waiting FROM generation_queue WHERE project_id=?").bind(projectId).first();
+        rebuilt+=Number(recovery.rebuilt||0);reconciled+=Number(recovery.reconciled||0);
+        projects.push({slot_no:Number(row.slot_no||0),project_id:projectId,rebuilt:Number(recovery.rebuilt||0),reconciled:Number(recovery.reconciled||0),missing:Number(sceneStat?.missing||0),waiting:Number(queueStat?.waiting||0),status});
+      }
+      await logEvent(env,'warn','production','lineup_queue_recovery','편성표 부족 장면 큐 명시 복구','',{lineup_id:lineupId,project_count:projects.length,rebuilt,reconciled});
+      return json({ok:true,lineup_id:lineupId,project_count:projects.length,rebuilt,reconciled,projects});
+    }catch(e){
+      await logEvent(env,'error','production','lineup_queue_recovery_failed',e.message||String(e),'',{lineup_id:lineupId});
+      return json({ok:false,error:e.message||String(e)},500);
+    }
+  }
+
+`;
+source=source.replace(apiAnchor,recoveryRoute+apiAnchor);
+
 for(const token of [
   "generated_asset_id IS NULL",
   "status IN ('cancelled','generating')",
@@ -73,7 +107,11 @@ for(const token of [
   "'queue_rebuilt'",
   '누락된 부족 장면 큐 재생성',
   'queue_rebuilt:recovery.rebuilt',
-  'scene_reconciled:recovery.reconciled'
+  'scene_reconciled:recovery.reconciled',
+  "/api/maintenance/recover-lineup-queues",
+  "'lineup_queue_recovery'",
+  '편성표 부족 장면 큐 명시 복구',
+  'project_count:projects.length,rebuilt,reconciled,projects'
 ]){
   if(!source.includes(token)){
     console.error('Production queue recovery patch failed: required marker missing: '+token);
@@ -82,4 +120,4 @@ for(const token of [
 }
 
 fs.writeFileSync(file,source);
-console.log('PRODUCTION QUEUE RECOVERY PATCH OK: stale missing flags with valid active assets are reconciled; only truly asset-less missing scenes rebuild absent queues; stale queue recovery and zero-cost asset reuse remain intact.');
+console.log('PRODUCTION QUEUE RECOVERY PATCH OK: explicit authenticated lineup recovery API added; stale missing flags reconcile, truly asset-less scenes rebuild queues, stale queues resume, and zero-cost asset reuse remains intact.');
