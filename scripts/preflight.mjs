@@ -35,7 +35,11 @@ const requiredSource = [
   'FREE_LIMIT_ASSET_REUSED',
   "logEvent(env,'warn','ai','FREE_LIMIT_ASSET_REUSED'",
   'reused_due_to_free_limit:true',
-  "assertUsageWithinLimit(env,'image_generations','daily_image_limit',60)"
+  "assertUsageWithinLimit(env,'image_generations','daily_image_limit',60)",
+  "SET status='waiting',last_error=''",
+  "status='cancelled'",
+  "'queue_resume'",
+  '취소된 부족 장면 큐 복구'
 ];
 const requiredConfig = [
   'name = "k-stella-shorts-factory"',
@@ -70,4 +74,4 @@ if (missing.length) {
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + zero-cost existing-asset fallback + 12h session fallback verified.');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + zero-cost existing-asset fallback + cancelled queue recovery + 12h session fallback verified.');
