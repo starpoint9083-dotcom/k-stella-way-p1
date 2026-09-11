@@ -1,0 +1,37 @@
+name: Validate P3 Bridge Auth
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/patch-free-mode.mjs'
+      - 'scripts/preflight.mjs'
+      - '.github/workflows/validate-p3-bridge.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Assemble, inject bridge auth, and syntax check
+        run: npm run check
+      - name: P1 preflight
+        run: npm run preflight
+      - name: Assert bridge secret is environment-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'env.P3_BRIDGE_TOKEN&&token===env.P3_BRIDGE_TOKEN' src/index.js
+          ! grep -Eq 'P3_BRIDGE_TOKEN[[:space:]]*=[[:space:]]*["'"'][^"'"']+' src/index.js
+          echo 'P3 bridge auth validation PASS'
