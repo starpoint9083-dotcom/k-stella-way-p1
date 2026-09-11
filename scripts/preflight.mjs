@@ -17,10 +17,13 @@ const requiredSource = [
   "P3_GITHUB_OIDC_AUDIENCE='k-stella-p1-p3-bridge'",
   "P3_GITHUB_REPOSITORY='starpoint9083-dotcom/p3-automation-hub-'",
   "P3_GITHUB_REPOSITORY_ID='1364648201'",
+  "P3_GITHUB_OWNER_ID='307467963'",
   "P3_GITHUB_REF='refs/heads/main'",
   "P3_GITHUB_WORKFLOW_REF='starpoint9083-dotcom/p3-automation-hub-/.github/workflows/p1-browser-factory.yml@refs/heads/main'",
+  "P3_GITHUB_IMMUTABLE_SUB='repo:starpoint9083-dotcom@307467963/p3-automation-hub-@1364648201:ref:refs/heads/main'",
   "['workflow_dispatch','schedule','push']",
   "payload?.runner_environment!=='github-hosted'",
+  "payload?.sub!==P3_GITHUB_IMMUTABLE_SUB",
   "return verifySession(env,cookieValue(request,'kstella_session'))"
 ];
 const requiredConfig = [
@@ -48,11 +51,12 @@ if (/P3_BRIDGE_TOKEN\s*=\s*["'][^"']+/i.test(source)) {
   missing.push('security: hard-coded P3 bridge token');
 }
 if (!source.includes("header?.alg!=='RS256'")) missing.push('security: OIDC algorithm pin');
-if (!source.includes("payload?.sub!==('repo:'+P3_GITHUB_REPOSITORY+':ref:'+P3_GITHUB_REF)")) missing.push('security: OIDC subject pin');
+if (!source.includes("payload?.sub!==P3_GITHUB_IMMUTABLE_SUB")) missing.push('security: immutable OIDC subject pin');
+if (!source.includes("String(payload?.repository_owner_id||'')!==P3_GITHUB_OWNER_ID")) missing.push('security: owner id pin');
 if (!source.includes("crypto.subtle.verify({name:'RSASSA-PKCS1-v1_5'}")) missing.push('security: OIDC signature verification');
 if (missing.length) {
   console.error('PREFLIGHT FAILED');
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + P3 GitHub OIDC trust + one-time main-push live-test allowance + 12h session fallback verified; no R2 billing dependency or embedded bridge secret.');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC subject/owner/repo identity + one-time push test allowance + 12h session fallback verified.');
