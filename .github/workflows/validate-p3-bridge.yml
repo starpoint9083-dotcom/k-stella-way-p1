@@ -4,7 +4,10 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'package.json'
       - 'scripts/patch-free-mode.mjs'
+      - 'scripts/patch-lineup-timeout.mjs'
+      - 'scripts/patch-free-asset-reuse.mjs'
       - 'scripts/preflight.mjs'
       - '.github/workflows/validate-p3-bridge.yml'
 
@@ -24,7 +27,7 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Assemble, inject bridge auth, and syntax check
+      - name: Assemble, apply all post-assembly patches, and syntax check
         run: npm run check
       - name: P1 preflight
         run: npm run preflight
