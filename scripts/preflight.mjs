@@ -8,19 +8,28 @@ const requiredSource = [
   '/healthz',
   'ASSETS_BUCKET',
   'env.DB',
-  'env.AI'
+  'env.AI',
+  'KSTELLA_KV_MAX_VALUE',
+  'kstellaAdaptFreeEnv'
 ];
 const requiredConfig = [
   'name = "k-stella-shorts-factory"',
   'binding = "DB"',
   'database_name = "k-stella-shorts-factory"',
+  '[[kv_namespaces]]',
   'binding = "ASSETS_BUCKET"',
-  'bucket_name = "k-stella-shorts-assets"',
+  'id = "__KV_NAMESPACE_ID__"',
+  'STORAGE_MODE = "kv-free"',
   'binding = "AI"'
+];
+const forbiddenConfig = [
+  '[[r2_buckets]]',
+  'bucket_name = "k-stella-shorts-assets"'
 ];
 const missing = [];
 for (const token of requiredSource) if (!source.includes(token)) missing.push(`source:${token}`);
 for (const token of requiredConfig) if (!tpl.includes(token)) missing.push(`config:${token}`);
+for (const token of forbiddenConfig) if (tpl.includes(token)) missing.push(`zero-cost violation:${token}`);
 if (/CLOUDFLARE_API_TOKEN\s*=|api[_-]?token\s*[:=]\s*["'][^"']+/i.test(source)) {
   missing.push('security: possible hard-coded API token');
 }
@@ -29,4 +38,4 @@ if (missing.length) {
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + DB/R2/AI contract verified');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI contract verified; no R2 billing dependency.');
