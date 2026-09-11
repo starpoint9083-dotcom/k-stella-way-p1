@@ -30,25 +30,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Assemble + syntax check
+      - name: Assemble + zero-cost patch + syntax check
         run: npm run check
 
-      - name: Inspect asset API usage
-        shell: bash
-        run: |
-          node - <<'NODE'
-          const fs = require('fs');
-          const lines = fs.readFileSync('src/index.js','utf8').split(/\r?\n/);
-          for (let i=0;i<lines.length;i++) {
-            if (lines[i].includes('ASSETS_BUCKET')) {
-              const a=Math.max(0,i-2), b=Math.min(lines.length,i+3);
-              console.log(`--- ASSETS_BUCKET around line ${i+1} ---`);
-              console.log(lines.slice(a,b).map((x,j)=>`${a+j+1}: ${x}`).join('\n'));
-            }
-          }
-          NODE
-
-      - name: P1 preflight
+      - name: P1 zero-cost preflight
         run: npm run preflight
 
       - name: Check Cloudflare token
@@ -77,12 +62,11 @@ jobs:
           echo "CLOUDFLARE_ACCOUNT_ID=$account_id" >> "$GITHUB_ENV"
           echo "Resolved dedicated K-STELLA-P1 account."
 
-      - name: Ensure dedicated D1 and R2 exist
+      - name: Ensure dedicated D1 exists
         if: steps.creds.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
-
           d1_json=$(npx wrangler d1 list --json)
           if ! printf '%s' "$d1_json" | jq -e '.[]? | select(.name == "k-stella-shorts-factory")' >/dev/null; then
             echo "Creating dedicated D1 k-stella-shorts-factory"
@@ -91,17 +75,57 @@ jobs:
             echo "Dedicated D1 already exists."
           fi
 
-          r2_text=$(npx wrangler r2 bucket list)
-          if ! printf '%s' "$r2_text" | grep -Fq 'k-stella-shorts-assets'; then
-            echo "Creating dedicated R2 k-stella-shorts-assets"
-            npx wrangler r2 bucket create k-stella-shorts-assets
-          else
-            echo "Dedicated R2 already exists."
+      - name: Ensure zero-cost KV namespace exists
+        if: steps.creds.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/storage/kv/namespaces"
+          list=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api?per_page=100")
+          if [ "$(printf '%s' "$list" | jq -r '.success')" != "true" ]; then
+            printf '%s\n' "$list" | jq .
+            exit 1
           fi
+          kv_id=$(printf '%s' "$list" | jq -r '[.result[]? | select(.title == "k-stella-shorts-assets-kv")][0].id // empty')
+          if [ -z "$kv_id" ]; then
+            echo "Creating zero-cost Workers KV namespace k-stella-shorts-assets-kv"
+            created=$(curl -fsS -X POST \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data '{"title":"k-stella-shorts-assets-kv"}' \
+              "$api")
+            if [ "$(printf '%s' "$created" | jq -r '.success')" != "true" ]; then
+              printf '%s\n' "$created" | jq .
+              exit 1
+            fi
+            kv_id=$(printf '%s' "$created" | jq -r '.result.id // empty')
+          else
+            echo "Zero-cost KV namespace already exists."
+          fi
+          if [ -z "$kv_id" ]; then
+            echo "KV namespace ID could not be resolved."
+            exit 1
+          fi
+          echo "KV_NAMESPACE_ID=$kv_id" >> "$GITHUB_ENV"
+          echo "Resolved zero-cost KV namespace."
 
-      - name: Resolve dedicated D1 binding
+      - name: Generate dedicated D1 + KV bindings
         if: steps.creds.outputs.ready == 'true'
         run: npm run generate:wrangler
+
+      - name: Verify no R2 billing dependency
+        if: steps.creds.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq '[[kv_namespaces]]' wrangler.generated.toml
+          grep -Fq 'binding = "ASSETS_BUCKET"' wrangler.generated.toml
+          grep -Fq 'STORAGE_MODE = "kv-free"' wrangler.generated.toml
+          if grep -Fq '[[r2_buckets]]' wrangler.generated.toml; then
+            echo "R2 billing dependency found; refusing deployment."
+            exit 1
+          fi
+          echo "Zero-cost storage config verified: Workers KV, no R2."
 
       - name: Wrangler dry-run
         if: steps.creds.outputs.ready == 'true'
