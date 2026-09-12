@@ -34,6 +34,10 @@ const requiredSource = [
   'function validateTtsAudioBytes',
   'TTS_RESPONSE_NOT_AUDIO',
   "rawMime.includes('json')",
+  'function unwrapTtsJsonAudio',
+  "typeof payload?.audio==='string'",
+  'TTS_RESPONSE_JSON_INVALID',
+  "includes('json'))return unwrapTtsJsonAudio",
   'async function narrationRowIsValid',
   'async function getValidNarrationRow',
   'TTS_INVALID_STORED_NARRATION_PURGED',
@@ -101,4 +105,4 @@ if (missing.length) {
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + real-audio signature validation before TTS storage + persisted narration signature validation/purge/regeneration + zero-cost existing-asset fallback + stale queue recovery + stale missing-scene reconciliation + true asset-less queue rebuild + explicit authenticated lineup recovery API + 12h session fallback verified.');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + Workers AI JSON audio-envelope unwrap + real-audio signature validation before TTS storage + persisted narration signature validation/purge/regeneration + zero-cost existing-asset fallback + stale queue recovery + stale missing-scene reconciliation + true asset-less queue rebuild + explicit authenticated lineup recovery API + 12h session fallback verified.');
