@@ -11,7 +11,8 @@
     "patch:tts-audio": "node scripts/patch-tts-audio-validation.mjs",
     "patch:asset-reuse": "node scripts/patch-free-asset-reuse.mjs",
     "patch:queue-resume": "node scripts/patch-production-queue-resume.mjs",
-    "check": "npm run assemble && npm run patch:free && npm run patch:lineup-timeout && npm run patch:media-timeouts && npm run patch:tts-audio && npm run patch:asset-reuse && npm run patch:queue-resume && node --check src/index.js",
+    "patch:owned-music": "node scripts/patch-owned-procedural-music.mjs",
+    "check": "npm run assemble && npm run patch:free && npm run patch:lineup-timeout && npm run patch:media-timeouts && npm run patch:tts-audio && npm run patch:asset-reuse && npm run patch:queue-resume && npm run patch:owned-music && node --check src/index.js",
     "preflight": "node scripts/preflight.mjs",
     "generate:wrangler": "node scripts/generate-wrangler.mjs"
   },
