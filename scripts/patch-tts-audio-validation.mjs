@@ -7,14 +7,12 @@ const aiMatch=/async\s+function\s+aiBinaryResult\s*\([^)]*\)\s*\{/.exec(source);
 const narrationMatch=/async\s+function\s+generateNarration\s*\([^)]*\)\s*\{/.exec(source);
 const aiStart=aiMatch?.index??-1,narrationStart=narrationMatch?.index??-1;
 if(aiStart<0||narrationStart<0||narrationStart<=aiStart){
-  const aiHint=source.match(/.{0,80}aiBinaryResult.{0,180}/s)?.[0]||'none';
-  const narrationHint=source.match(/.{0,80}generateNarration.{0,180}/s)?.[0]||'none';
-  console.error('TTS audio validation patch failed: function anchors not found/order invalid. aiHint='+aiHint+' narrationHint='+narrationHint);
+  console.error('TTS audio validation patch failed: aiBinaryResult/generateNarration anchors not found.');
   process.exit(1);
 }
 
-const audioHelpers=`function ttsAudioKind(buffer){
-  const b=new Uint8Array(buffer||new ArrayBuffer(0));
+const replacement=`function ttsAudioKind(bytes){
+  const b=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes||new ArrayBuffer(0));
   const ascii=(a,z)=>String.fromCharCode(...b.slice(a,z));
   if(b.length>=12&&ascii(0,4)==='RIFF'&&ascii(8,12)==='WAVE')return 'wav';
   if(b.length>=3&&ascii(0,3)==='ID3')return 'mp3';
@@ -23,92 +21,88 @@ const audioHelpers=`function ttsAudioKind(buffer){
   if(b.length>=4&&b[0]===0x1a&&b[1]===0x45&&b[2]===0xdf&&b[3]===0xa3)return 'webm';
   return '';
 }
-function ttsMimeForKind(kind,mime=''){
+function ttsMimeForKind(kind){
   if(kind==='wav')return 'audio/wav';
   if(kind==='ogg')return 'audio/ogg';
   if(kind==='webm')return 'audio/webm';
-  if(kind==='mp3')return 'audio/mpeg';
-  return String(mime||'').toLowerCase();
+  return 'audio/mpeg';
 }
-function ttsPreview(buffer){
-  try{return new TextDecoder().decode(new Uint8Array(buffer).slice(0,500)).replace(/\\s+/g,' ').slice(0,300);}catch(_){return '';}
+function ttsPreview(bytes){
+  try{return new TextDecoder().decode((bytes instanceof Uint8Array?bytes:new Uint8Array(bytes||new ArrayBuffer(0))).slice(0,500)).replace(/\\s+/g,' ').slice(0,300);}catch(_){return '';}
 }
-function validateTtsAudioBinary({buffer,mime},context='tts'){
-  const bytes=buffer?.byteLength||0,rawMime=String(mime||'').toLowerCase(),kind=ttsAudioKind(buffer);
-  if(!bytes)throw new Error('TTS_RESPONSE_NOT_AUDIO: '+context+' returned empty body');
+function validateTtsAudioBytes(bytes,mime='application/octet-stream',context='tts'){
+  const b=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes||new ArrayBuffer(0)),rawMime=String(mime||'').toLowerCase(),kind=ttsAudioKind(b);
+  if(!b.byteLength)throw new Error('TTS_RESPONSE_NOT_AUDIO: '+context+' returned empty body');
   if(!kind){
-    const preview=ttsPreview(buffer),looksJson=rawMime.includes('json')||preview.startsWith('{')||preview.startsWith('['),looksText=rawMime.startsWith('text/');
-    throw new Error('TTS_RESPONSE_NOT_AUDIO: '+context+' mime='+(rawMime||'unknown')+' bytes='+bytes+(looksJson||looksText?' body='+preview:''));
+    const preview=ttsPreview(b),looksJson=rawMime.includes('json')||preview.startsWith('{')||preview.startsWith('['),looksText=rawMime.startsWith('text/');
+    throw new Error('TTS_RESPONSE_NOT_AUDIO: '+context+' mime='+(rawMime||'unknown')+' bytes='+b.byteLength+(looksJson||looksText?' body='+preview:''));
   }
-  return {buffer,mime:ttsMimeForKind(kind,rawMime),kind};
+  return{bytes:b,mime:ttsMimeForKind(kind),kind};
 }
-async function storedNarrationIsValid(env,row){
+async function narrationRowIsValid(env,row){
   if(!row?.object_key||!String(row?.mime_type||'').toLowerCase().startsWith('audio/'))return false;
   try{
-    const object=await env.ASSETS_BUCKET.get(row.object_key);if(!object)return false;
-    const buffer=await object.arrayBuffer();
-    validateTtsAudioBinary({buffer,mime:row.mime_type},'cached narration '+row.id);
+    const obj=await env.ASSETS_BUCKET.get(row.object_key);if(!obj)return false;
+    const bytes=new Uint8Array(await obj.arrayBuffer());
+    validateTtsAudioBytes(bytes,row.mime_type,'stored narration '+row.id);
     return true;
   }catch(_){return false;}
 }
-async function aiBinaryResult(result){
+async function getValidNarrationRow(env,projectId){
+  const row=await env.DB.prepare('SELECT * FROM narration_assets WHERE project_id=?').bind(projectId).first();
+  if(!row)return null;
+  if(await narrationRowIsValid(env,row))return row;
+  await logEvent(env,'warn','ai','TTS_INVALID_STORED_NARRATION_PURGED','잘못된 나레이션 파일을 제거하고 다시 생성하도록 표시합니다.',projectId,{narration_asset_id:row.id,mime_type:String(row.mime_type||''),object_key:String(row.object_key||'')});
+  try{if(row.object_key&&env.ASSETS_BUCKET?.delete)await env.ASSETS_BUCKET.delete(row.object_key);}catch(_){ }
+  await env.DB.prepare('DELETE FROM narration_assets WHERE project_id=?').bind(projectId).run();
+  return null;
+}
+async function aiBinaryResult(result,defaultType='audio/mpeg'){
+  let bytes,mime=defaultType;
   if(result instanceof Response){
-    const mime=result.headers.get('content-type')||'application/octet-stream',status=result.status,ok=result.ok;
-    const buffer=await result.arrayBuffer();
-    if(!ok)throw new Error('TTS_AI_HTTP_'+status+': '+ttsPreview(buffer));
-    return validateTtsAudioBinary({buffer,mime},'Workers AI response');
-  }
-  let candidate=null;
-  if(result?.body instanceof ReadableStream)candidate={buffer:await new Response(result.body).arrayBuffer(),mime:'audio/mpeg'};
-  else if(result instanceof ArrayBuffer)candidate={buffer:result,mime:'audio/mpeg'};
-  else if(ArrayBuffer.isView(result))candidate={buffer:result.buffer.slice(result.byteOffset,result.byteOffset+result.byteLength),mime:'audio/mpeg'};
-  else if(result?.audio instanceof ArrayBuffer)candidate={buffer:result.audio,mime:'audio/mpeg'};
-  else if(typeof result?.audio==='string')candidate={buffer:b64ToArrayBuffer(result.audio),mime:'audio/mpeg'};
-  else if(typeof result==='string')candidate={buffer:b64ToArrayBuffer(result),mime:'audio/mpeg'};
-  if(!candidate)throw new Error('binary audio response unsupported');
-  return validateTtsAudioBinary(candidate,'Workers AI result');
+    mime=result.headers.get('content-type')||defaultType;bytes=new Uint8Array(await result.arrayBuffer());
+    if(!result.ok)throw new Error('TTS_AI_HTTP_'+result.status+': '+ttsPreview(bytes));
+  }else if(result instanceof ReadableStream){bytes=new Uint8Array(await new Response(result).arrayBuffer());}
+  else if(result instanceof ArrayBuffer){bytes=new Uint8Array(result);}
+  else if(ArrayBuffer.isView(result)){bytes=new Uint8Array(result.buffer,result.byteOffset,result.byteLength);}
+  else if(result?.body instanceof ReadableStream){bytes=new Uint8Array(await new Response(result.body).arrayBuffer());mime=result?.headers?.get?.('content-type')||defaultType;}
+  else if(result?.audio){bytes=decodeBase64Bytes(result.audio);mime=result.content_type||result.mime_type||defaultType;}
+  else if(result?.result?.audio){bytes=decodeBase64Bytes(result.result.audio);mime=result.result.content_type||defaultType;}
+  else if(typeof result==='string'){bytes=decodeBase64Bytes(result);}
+  else throw new Error('TTS 오디오 응답 형식을 읽을 수 없습니다.');
+  return validateTtsAudioBytes(bytes,mime,'Workers AI response');
 }
 `;
-source=source.slice(0,aiStart)+audioHelpers+'\n'+source.slice(narrationStart);
+source=source.slice(0,aiStart)+replacement+'\n'+source.slice(narrationStart);
 
-const genMatch=/async\s+function\s+generateNarration\s*\([^)]*\)\s*\{/.exec(source);
-const genStart=genMatch?.index??-1;
-const genSlice=genStart>=0?source.slice(genStart):'';
-const assertMatch=/assertChars\([^;]{0,400}LIMITS\.narration_max_chars\);/.exec(genSlice);
-const assertPos=assertMatch?genStart+assertMatch.index:-1;
-if(genStart<0||assertPos<0){
-  const hint=genStart>=0?source.slice(genStart,Math.min(source.length,genStart+1600)):'generateNarration missing';
-  console.error('TTS audio validation patch failed: generateNarration assertion anchor not found. hint='+hint);
-  process.exit(1);
-}
-const prefix=`async function generateNarration(env,projectId,narration){
-  const text=narration.full||narration.text||'';
-  if(!text)throw new Error('narration text empty');
-  const sha=await digestSha256Hex(text);
-  let existing=await env.DB.prepare('SELECT * FROM narration_assets WHERE project_id=? AND text_sha256=? ORDER BY id DESC LIMIT 1').bind(projectId,sha).first();
-  if(existing){
-    if(await storedNarrationIsValid(env,existing)){
-      await env.DB.prepare('UPDATE projects SET narration_asset_id=?,narration_status=? WHERE id=?').bind(existing.id,'ready',projectId).run();
-      return existing;
-    }
-    await logEvent(env,'warn','ai','TTS_INVALID_CACHE_BYPASSED','잘못된 나레이션 캐시를 무시하고 다시 생성합니다.',projectId,{narration_asset_id:existing.id,mime_type:String(existing.mime_type||''),object_key:String(existing.object_key||'')});
-    await env.DB.prepare("UPDATE projects SET narration_asset_id=NULL,narration_status='missing',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(projectId).run();
-    existing=null;
-  }
-  `;
-source=source.slice(0,genStart)+prefix+source.slice(assertPos);
+const getRouteOld="const projectId=url.searchParams.get('project_id')||'';if(!projectId)return json({ok:true,narration:null});const row=await env.DB.prepare('SELECT * FROM narration_assets WHERE project_id=?').bind(projectId).first();return json({ok:true,narration:publicNarration(row)});";
+const getRouteNew="const projectId=url.searchParams.get('project_id')||'';if(!projectId)return json({ok:true,narration:null});const row=await getValidNarrationRow(env,projectId);return json({ok:true,narration:publicNarration(row)});";
+if(!source.includes(getRouteOld)){console.error('TTS audio validation patch failed: narration GET route anchor not found.');process.exit(1);}
+source=source.replace(getRouteOld,getRouteNew);
+
+const planOld="narrationRow=await env.DB.prepare('SELECT * FROM narration_assets WHERE project_id=?').bind(projectId).first(),narration=publicNarration(narrationRow);";
+const planNew="narrationRow=await getValidNarrationRow(env,projectId),narration=publicNarration(narrationRow);";
+if(!source.includes(planOld)){console.error('TTS audio validation patch failed: video-plan narration anchor not found.');process.exit(1);}
+source=source.replace(planOld,planNew);
+
+const qualityOld="narr=await env.DB.prepare('SELECT * FROM narration_assets WHERE project_id=?').bind(projectId).first();";
+const qualityNew="narr=await getValidNarrationRow(env,projectId);";
+if(!source.includes(qualityOld)){console.error('TTS audio validation patch failed: quality narration anchor not found.');process.exit(1);}
+source=source.replace(qualityOld,qualityNew);
 
 for(const token of [
-  'function validateTtsAudioBinary',
+  'function validateTtsAudioBytes',
   'TTS_RESPONSE_NOT_AUDIO',
   "rawMime.includes('json')",
-  'function storedNarrationIsValid',
-  "String(row?.mime_type||'').toLowerCase().startsWith('audio/')",
-  'TTS_INVALID_CACHE_BYPASSED',
-  '잘못된 나레이션 캐시를 무시하고 다시 생성합니다.',
-  "narration_asset_id=NULL,narration_status='missing'",
+  'async function narrationRowIsValid',
+  'async function getValidNarrationRow',
+  'TTS_INVALID_STORED_NARRATION_PURGED',
+  '잘못된 나레이션 파일을 제거하고 다시 생성하도록 표시합니다.',
+  "DELETE FROM narration_assets WHERE project_id=?",
   'TTS_AI_HTTP_',
-  "return {buffer,mime:ttsMimeForKind(kind,rawMime),kind}"
+  'const row=await getValidNarrationRow(env,projectId)',
+  'narrationRow=await getValidNarrationRow(env,projectId)',
+  'narr=await getValidNarrationRow(env,projectId)'
 ]){
   if(!source.includes(token)){
     console.error('TTS audio validation patch failed: required marker missing: '+token);
@@ -117,4 +111,4 @@ for(const token of [
 }
 
 fs.writeFileSync(file,source);
-console.log('TTS AUDIO VALIDATION PATCH OK: HTTP/JSON/non-audio TTS responses are rejected; cached narration objects must contain real audio before reuse; corrupt cache is bypassed and regenerated.');
+console.log('TTS AUDIO VALIDATION PATCH OK: non-audio Workers AI responses are rejected before storage; persisted narration is signature-checked on read; corrupt rows/objects are purged so production regenerates TTS automatically.');
