@@ -31,15 +31,18 @@ const requiredSource = [
   '180000',
   "new Error('TTS AI 120초 제한 초과')",
   '120000',
-  'function validateTtsAudioBinary',
+  'function validateTtsAudioBytes',
   'TTS_RESPONSE_NOT_AUDIO',
   "rawMime.includes('json')",
-  'function storedNarrationIsValid',
-  "String(row?.mime_type||'').toLowerCase().startsWith('audio/')",
-  'TTS_INVALID_CACHE_BYPASSED',
-  '잘못된 나레이션 캐시를 무시하고 다시 생성합니다.',
-  "narration_asset_id=NULL,narration_status='missing'",
+  'async function narrationRowIsValid',
+  'async function getValidNarrationRow',
+  'TTS_INVALID_STORED_NARRATION_PURGED',
+  '잘못된 나레이션 파일을 제거하고 다시 생성하도록 표시합니다.',
+  "DELETE FROM narration_assets WHERE project_id=?",
   'TTS_AI_HTTP_',
+  'const row=await getValidNarrationRow(env,projectId)',
+  'narrationRow=await getValidNarrationRow(env,projectId)',
+  'narr=await getValidNarrationRow(env,projectId)',
   'reuseExistingAssetAtFreeLimit',
   'FREE_LIMIT_ASSET_REUSED',
   "logEvent(env,'warn','ai','FREE_LIMIT_ASSET_REUSED'",
@@ -98,4 +101,4 @@ if (missing.length) {
   for (const item of missing) console.error('-', item);
   process.exit(1);
 }
-console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + verified real-audio TTS responses + corrupt narration cache bypass/regeneration + zero-cost existing-asset fallback + stale queue recovery + stale missing-scene reconciliation + true asset-less queue rebuild + explicit authenticated lineup recovery API + 12h session fallback verified.');
+console.log('PREFLIGHT OK: P1 V11 + D1/KV-free/AI + immutable P3 GitHub OIDC identity + bounded lineup/image/TTS AI calls + real-audio signature validation before TTS storage + persisted narration signature validation/purge/regeneration + zero-cost existing-asset fallback + stale queue recovery + stale missing-scene reconciliation + true asset-less queue rebuild + explicit authenticated lineup recovery API + 12h session fallback verified.');
