@@ -38,7 +38,7 @@ async function ensureKStellaOwnedMusic(env){
   }
   const key='audio/builtin/k-stella-original-drama-bed-01.wav';
   await env.ASSETS_BUCKET.put(key,bytes,{httpMetadata:{contentType:'audio/wav'}});
-  await env.DB.prepare(`INSERT INTO audio_assets(filename,object_key,sha256,mime_type,kind,mood,tempo_class,bpm,energy,tags,status,notes,license_status,license_note,source_url) VALUES(?,?,?,?,?,?,?,?,?,?,'active',?,?,?,?)`).bind(filename,key,sha,'audio/wav','music','romantic tense mysterious','fast',120,7,normalizeTags('romantic,tense,mysterious,drama,ambient'),'P1 zero-cost built-in music fallback','owned','K 스텔라 웨이 Worker 자체 합성 원본 · 외부 음원/샘플 미사용','').run();
+  await env.DB.prepare("INSERT INTO audio_assets(filename,object_key,sha256,mime_type,kind,mood,tempo_class,bpm,energy,tags,status,notes,license_status,license_note,source_url) VALUES(?,?,?,?,?,?,?,?,?,?,'active',?,?,?,?)").bind(filename,key,sha,'audio/wav','music','romantic tense mysterious','fast',120,7,normalizeTags('romantic,tense,mysterious,drama,ambient'),'P1 zero-cost built-in music fallback','owned','K 스텔라 웨이 Worker 자체 합성 원본 · 외부 음원/샘플 미사용','').run();
   row=await env.DB.prepare('SELECT * FROM audio_assets WHERE sha256=?').bind(sha).first();
   await logEvent(env,'info','audio','OWNED_PROCEDURAL_MUSIC_SEEDED','자체 합성 배경음악을 자동 등록했습니다.','',{audio_asset_id:row?.id||null,bytes:bytes.byteLength,license_status:'owned'});
   return row;
