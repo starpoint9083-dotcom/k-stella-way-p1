@@ -11,7 +11,7 @@
     "patch:tts-audio": "node scripts/patch-tts-audio-validation.mjs",
     "patch:asset-reuse": "node scripts/patch-free-asset-reuse.mjs",
     "patch:queue-resume": "node scripts/patch-production-queue-resume.mjs",
-    "patch:stella-production": "node scripts/patch-stella-subtitle-music-style.mjs",
+    "patch:stella-production": "node scripts/run-stella-production-patch.mjs",
     "check": "npm run assemble && npm run patch:free && npm run patch:lineup-timeout && npm run patch:media-timeouts && npm run patch:tts-audio && npm run patch:asset-reuse && npm run patch:queue-resume && npm run patch:stella-production && node --check src/index.js",
     "preflight": "node scripts/preflight.mjs && node scripts/preflight-stella-production.mjs",
     "generate:wrangler": "node scripts/generate-wrangler.mjs"
