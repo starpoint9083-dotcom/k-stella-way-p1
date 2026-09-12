@@ -39,6 +39,16 @@ function validateTtsAudioBytes(bytes,mime='application/octet-stream',context='tt
   }
   return{bytes:b,mime:ttsMimeForKind(kind),kind};
 }
+function unwrapTtsJsonAudio(bytes,defaultType='audio/mpeg'){
+  let payload;
+  try{payload=JSON.parse(new TextDecoder().decode(bytes instanceof Uint8Array?bytes:new Uint8Array(bytes||new ArrayBuffer(0))));}
+  catch(_){throw new Error('TTS_RESPONSE_JSON_INVALID: Workers AI returned invalid JSON');}
+  const encoded=typeof payload?.audio==='string'?payload.audio:typeof payload?.result?.audio==='string'?payload.result.audio:'';
+  if(!encoded)throw new Error('TTS_RESPONSE_NOT_AUDIO: Workers AI JSON response has no audio field');
+  const decoded=decodeBase64Bytes(encoded);
+  const mime=payload?.content_type||payload?.mime_type||payload?.result?.content_type||payload?.result?.mime_type||defaultType;
+  return validateTtsAudioBytes(decoded,mime,'Workers AI JSON audio');
+}
 async function narrationRowIsValid(env,row){
   if(!row?.object_key||!String(row?.mime_type||'').toLowerCase().startsWith('audio/'))return false;
   try{
@@ -62,6 +72,7 @@ async function aiBinaryResult(result,defaultType='audio/mpeg'){
   if(result instanceof Response){
     mime=result.headers.get('content-type')||defaultType;bytes=new Uint8Array(await result.arrayBuffer());
     if(!result.ok)throw new Error('TTS_AI_HTTP_'+result.status+': '+ttsPreview(bytes));
+    if(String(mime).toLowerCase().includes('json'))return unwrapTtsJsonAudio(bytes,defaultType);
   }else if(result instanceof ReadableStream){bytes=new Uint8Array(await new Response(result).arrayBuffer());}
   else if(result instanceof ArrayBuffer){bytes=new Uint8Array(result);}
   else if(ArrayBuffer.isView(result)){bytes=new Uint8Array(result.buffer,result.byteOffset,result.byteLength);}
@@ -94,6 +105,10 @@ for(const token of [
   'function validateTtsAudioBytes',
   'TTS_RESPONSE_NOT_AUDIO',
   "rawMime.includes('json')",
+  'function unwrapTtsJsonAudio',
+  "typeof payload?.audio==='string'",
+  'TTS_RESPONSE_JSON_INVALID',
+  "includes('json'))return unwrapTtsJsonAudio",
   'async function narrationRowIsValid',
   'async function getValidNarrationRow',
   'TTS_INVALID_STORED_NARRATION_PURGED',
@@ -111,4 +126,4 @@ for(const token of [
 }
 
 fs.writeFileSync(file,source);
-console.log('TTS AUDIO VALIDATION PATCH OK: non-audio Workers AI responses are rejected before storage; persisted narration is signature-checked on read; corrupt rows/objects are purged so production regenerates TTS automatically.');
+console.log('TTS AUDIO VALIDATION PATCH OK: Workers AI JSON audio envelopes are unwrapped to real audio bytes; non-audio responses are rejected; persisted narration is signature-checked and corrupt rows/objects are purged for automatic regeneration.');
