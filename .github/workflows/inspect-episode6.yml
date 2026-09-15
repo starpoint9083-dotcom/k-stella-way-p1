@@ -1,0 +1,46 @@
+name: Inspect Episode 6 Data
+
+on:
+  push:
+    branches: [p1-v12-rebuild]
+    paths:
+      - '.github/workflows/inspect-episode6.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-episode6:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - name: Resolve K-STELLA-P1 account and D1
+        shell: bash
+        run: |
+          set -euo pipefail
+          accounts=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts?per_page=100")
+          account_id=$(printf '%s' "$accounts" | jq -r '[.result[]? | select(.name == "K-STELLA-P1")][0].id // empty')
+          [ -n "$account_id" ] || { echo "K-STELLA-P1 account not found"; exit 1; }
+          echo "CLOUDFLARE_ACCOUNT_ID=$account_id" >> "$GITHUB_ENV"
+          d1=$(CLOUDFLARE_ACCOUNT_ID="$account_id" npx wrangler d1 list --json)
+          db_id=$(printf '%s' "$d1" | jq -r '[.[]? | select(.name == "k-stella-shorts-factory")][0].uuid // empty')
+          [ -n "$db_id" ] || { echo "D1 k-stella-shorts-factory not found"; exit 1; }
+          echo "D1_ID=$db_id" >> "$GITHUB_ENV"
+      - name: Print D1 schema only
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$D1_ID/query"
+          body=$(jq -nc --arg sql "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name" '{sql:$sql}')
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data "$body" "$api" | jq '{success,errors,result:[.result[]? | {success,results}]}'
