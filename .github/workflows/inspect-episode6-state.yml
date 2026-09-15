@@ -1,0 +1,56 @@
+name: Inspect Episode 6 State
+
+on:
+  push:
+    branches: [p1-v12-rebuild]
+    paths:
+      - '.github/workflows/inspect-episode6-state.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - name: Resolve account and database
+        shell: bash
+        run: |
+          set -euo pipefail
+          accounts=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts?per_page=100")
+          account_id=$(printf '%s' "$accounts" | jq -r '[.result[]? | select(.name == "K-STELLA-P1")][0].id // empty')
+          [ -n "$account_id" ] || exit 1
+          echo "CLOUDFLARE_ACCOUNT_ID=$account_id" >> "$GITHUB_ENV"
+          d1=$(CLOUDFLARE_ACCOUNT_ID="$account_id" npx wrangler d1 list --json)
+          db_id=$(printf '%s' "$d1" | jq -r '[.[]? | select(.name == "k-stella-shorts-factory")][0].uuid // empty')
+          [ -n "$db_id" ] || exit 1
+          echo "D1_ID=$db_id" >> "$GITHUB_ENV"
+      - name: Read episode 6 state
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$D1_ID/query"
+          query() {
+            label="$1"; sql="$2"
+            echo "===== $label ====="
+            body=$(jq -nc --arg sql "$sql" '{sql:$sql}')
+            curl -fsS -X POST -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" --data "$body" "$api" | jq '[.result[]?.results[]?]'
+          }
+          query PROJECTS "SELECT id,episode_no,content_group,title,hook,script,status,slot_no,theme,created_at,updated_at FROM projects WHERE episode_no=6 ORDER BY created_at DESC LIMIT 20"
+          query SCENES "SELECT p.id AS project_id,p.title,s.id AS scene_id,s.scene_no,s.scene_text,s.selected_asset_id,s.match_score,s.missing,a.filename,a.object_key,a.status AS asset_status,a.source,a.character_role,a.character_name,a.location,a.emotion,a.action FROM projects p JOIN scenes s ON s.project_id=p.id LEFT JOIN assets a ON a.id=s.selected_asset_id WHERE p.episode_no=6 ORDER BY p.created_at DESC,s.scene_no"
+          query QUEUE "SELECT p.id AS project_id,q.id,q.scene_no,q.status,q.generated_asset_id,q.attempts,q.last_error,q.created_at,q.updated_at FROM projects p JOIN generation_queue q ON q.project_id=p.id WHERE p.episode_no=6 ORDER BY p.created_at DESC,q.scene_no"
+          query VIDEO_PLANS "SELECT p.id AS project_id,v.id,v.target_duration,v.actual_duration,v.music_asset_id,v.status,v.created_at,v.updated_at FROM projects p JOIN video_plans v ON v.project_id=p.id WHERE p.episode_no=6 ORDER BY p.created_at DESC"
+          query RENDERED "SELECT p.id AS project_id,r.id,r.object_key,r.mime_type,r.width,r.height,r.duration,r.size_bytes,r.status,r.created_at FROM projects p JOIN rendered_videos r ON r.project_id=p.id WHERE p.episode_no=6 ORDER BY r.created_at DESC"
+          query QC "SELECT p.id AS project_id,q.id,q.rendered_video_id,q.status,q.score,q.checks_json,q.created_at FROM projects p JOIN quality_checks q ON q.project_id=p.id WHERE p.episode_no=6 ORDER BY q.created_at DESC"
+          query RELEASE "SELECT p.id AS project_id,r.id,r.rendered_video_id,r.status,r.score,r.reasons_json,r.created_at FROM projects p JOIN release_decisions r ON r.project_id=p.id WHERE p.episode_no=6 ORDER BY r.created_at DESC"
+          query ASSET_COUNTS "SELECT status,source,COUNT(*) AS count FROM assets GROUP BY status,source ORDER BY status,source"
+          query MUSIC "SELECT id,filename,object_key,mood,tempo_class,bpm,energy,status,license_status,usage_count FROM audio_assets WHERE status='active' ORDER BY usage_count ASC,id ASC LIMIT 20"
