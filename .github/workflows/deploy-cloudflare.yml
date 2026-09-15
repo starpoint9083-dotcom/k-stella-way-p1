@@ -2,7 +2,7 @@ name: P1 Cloudflare Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, p1-v12-rebuild]
   workflow_dispatch:
 
 concurrency:
