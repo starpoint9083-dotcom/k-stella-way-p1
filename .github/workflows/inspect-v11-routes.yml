@@ -1,8 +1,8 @@
-name: Inspect V11 Routes
+name: Inspect V12 Routes
 
 on:
   push:
-    branches: [main]
+    branches: [p1-v12-rebuild]
     paths:
       - 'scripts/inspect-routes.mjs'
       - '.github/workflows/inspect-v11-routes.yml'
@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: '22'
       - run: npm install
-      - name: Assemble and patch V11
+      - name: Assemble and patch V12
         run: npm run check
       - name: Inspect routes and production keywords
         run: node scripts/inspect-routes.mjs
