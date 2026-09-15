@@ -1,0 +1,66 @@
+name: Export Episode 6 Video
+
+on:
+  push:
+    branches: [p1-ep6-export]
+    paths:
+      - '.github/workflows/export-episode6.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      EP6_OBJECT_KEY: rendered/2026-09-15/6aa32307-7794-4d89-8f77-1b85a01ecf22-2a2af739-8eb3-461e-a920-f7340316da30.webm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve Cloudflare account and KV namespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          accounts=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts?per_page=100")
+          account_id=$(printf '%s' "$accounts" | jq -r '[.result[]? | select(.name == "K-STELLA-P1")][0].id // empty')
+          [ -n "$account_id" ] || { echo "K-STELLA-P1 account not found"; exit 1; }
+          list=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$account_id/storage/kv/namespaces?per_page=100")
+          kv_id=$(printf '%s' "$list" | jq -r '[.result[]? | select(.title == "k-stella-shorts-assets-kv")][0].id // empty')
+          [ -n "$kv_id" ] || { echo "KV namespace not found"; exit 1; }
+          echo "CF_ACCOUNT_ID=$account_id" >> "$GITHUB_ENV"
+          echo "CF_KV_ID=$kv_id" >> "$GITHUB_ENV"
+
+      - name: Download rendered Episode 6 from KV
+        shell: bash
+        run: |
+          set -euo pipefail
+          encoded=$(python - <<'PY'
+          import os, urllib.parse
+          print(urllib.parse.quote(os.environ['EP6_OBJECT_KEY'], safe=''))
+          PY
+          )
+          url="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$CF_KV_ID/values/$encoded"
+          curl -fsSL -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$url" -o K_STELLA_WAY_EP06.webm
+          size=$(wc -c < K_STELLA_WAY_EP06.webm)
+          echo "Episode 6 bytes: $size"
+          [ "$size" -gt 1000000 ] || { echo "Downloaded object is unexpectedly small"; exit 1; }
+          file K_STELLA_WAY_EP06.webm
+          sha256sum K_STELLA_WAY_EP06.webm
+
+      - name: Verify video stream
+        shell: bash
+        run: |
+          set -euo pipefail
+          ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height -show_entries format=duration,size -of json K_STELLA_WAY_EP06.webm
+
+      - name: Upload Episode 6 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: K-STELLA-WAY-EP06
+          path: K_STELLA_WAY_EP06.webm
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
