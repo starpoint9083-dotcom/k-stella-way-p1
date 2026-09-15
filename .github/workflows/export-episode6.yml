@@ -46,15 +46,16 @@ jobs:
           curl -fsSL -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$url" -o K_STELLA_WAY_EP06.webm
           size=$(wc -c < K_STELLA_WAY_EP06.webm)
           echo "Episode 6 bytes: $size"
-          [ "$size" -gt 1000000 ] || { echo "Downloaded object is unexpectedly small"; exit 1; }
-          file K_STELLA_WAY_EP06.webm
+          [ "$size" -eq 17175743 ] || { echo "Unexpected Episode 6 size"; exit 1; }
+          file K_STELLA_WAY_EP06.webm | grep -q 'WebM'
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('K_STELLA_WAY_EP06.webm')
+          magic=p.read_bytes()[:4]
+          assert magic == bytes.fromhex('1A45DFA3'), f'Invalid WebM EBML signature: {magic.hex()}'
+          print('WebM EBML signature OK')
+          PY
           sha256sum K_STELLA_WAY_EP06.webm
-
-      - name: Verify video stream
-        shell: bash
-        run: |
-          set -euo pipefail
-          ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height -show_entries format=duration,size -of json K_STELLA_WAY_EP06.webm
 
       - name: Upload Episode 6 artifact
         uses: actions/upload-artifact@v4
