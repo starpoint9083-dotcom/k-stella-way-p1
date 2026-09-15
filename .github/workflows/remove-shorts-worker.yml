@@ -1,0 +1,43 @@
+name: Remove failed P1 Shorts Worker
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  remove-worker-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Remove shorts Worker and preserve data stores
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo "Cloudflare token missing"
+            exit 1
+          fi
+          accounts=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts?per_page=100")
+          account_id=$(printf '%s' "$accounts" | jq -r '[.result[]? | select(.name == "K-STELLA-P1")][0].id // empty')
+          if [ -z "$account_id" ]; then
+            echo "K-STELLA-P1 account not found"
+            exit 1
+          fi
+          scripts=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$account_id/workers/scripts")
+          exists=$(printf '%s' "$scripts" | jq -r '[.result[]? | select(.id == "k-stella-shorts-factory")][0].id // empty')
+          if [ -z "$exists" ]; then
+            echo "k-stella-shorts-factory already absent"
+            exit 0
+          fi
+          resp=$(curl -fsS -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$account_id/workers/scripts/k-stella-shorts-factory")
+          if [ "$(printf '%s' "$resp" | jq -r '.success')" != "true" ]; then
+            printf '%s\n' "$resp" | jq .
+            exit 1
+          fi
+          echo "Removed k-stella-shorts-factory Worker. D1/KV/R2 untouched."
